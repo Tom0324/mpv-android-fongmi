@@ -79,7 +79,7 @@ jobs:
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
           cd buildscripts
           ./buildall.sh --arch arm64 mpv
-          ./buildall.sh -n
+          ./buildall.sh --arch arm64 -n
 
       - name: Upload AAR to Release asset
         env:
