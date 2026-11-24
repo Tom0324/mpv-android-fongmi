@@ -80,7 +80,11 @@ see <ndk>/sources/third_party/shaderc
 HEREDOC
 
 # libplacebo
-[ ! -d libplacebo ] && git clone --recursive https://github.com/haasn/libplacebo
+if [ ! -d libplacebo ]; then
+	args=()
+	[ $IN_CI -eq 1 ] && args+=(--depth=1 -b "$v_ci_libplacebo")
+	git clone --recursive https://github.com/haasn/libplacebo libplacebo "${args[@]}"
+fi
 
 # curl
 if [ ! -d curl ]; then
