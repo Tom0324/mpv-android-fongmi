@@ -1,119 +1,85 @@
-# mpv-android-fongmi
+# AAR 兼容性说明
 
-Native source repository for the AVC-fixed mpv Android AAR used by XNPlayer.
+本文件记录 `mpv-android-avcfix.aar` 的 ABI 与版本兼容范围。
 
-This repository is public. It is still a core build dependency and must not be deleted.
+---
 
-## Purpose
+## ABI 支持
 
-Builds the AAR consumed by `Tom0324/XNPlayer/app/libs/mpv-android-avcfix.aar`.
+| ABI | 支持 | 说明 |
+|---|---:|---|
+| `arm64-v8a` | 是 | 当前唯一支持的 ABI |
+| `armeabi-v7a` | 否 | 未构建进当前 AAR |
+| `x86` | 否 | 未构建进当前 AAR |
+| `x86_64` | 否 | 未构建进当前 AAR |
+| universal | 否 | 当前不是通用 AAR |
 
-It owns:
-
-- mpv source pin
-- FFmpeg source pin
-- libplacebo source pin
-- AVC PTS patch
-- Android native AAR build workflow
-- AAR Release asset
-
-## Current release
-
-Tag:
+结论：
 
 ```text
-native-avcfix-mpv042-ffmpeg9.1-lp7.387.0
+当前 AAR 只能用于 arm64-v8a。
+XNPlayer 当前也只构建 arm64-v8a。
 ```
 
-Asset:
+---
+
+## 当前版本基线
+
+验证日期：
 
 ```text
-app-release.aar
+2026-11-24
 ```
 
-Consumed by the app repo as:
+版本：
+
+| 组件 | 版本 |
+|---|---|
+| mpv | `v0.42.0` |
+| FFmpeg | `n9.1` |
+| FFmpeg commit | `74e4393595cf2b5857f0da925c4e0dd74ea306e5` |
+| libplacebo | `v7.387.0` |
+| AVC | PTS patch 已应用 |
+| JNI | `event(int, MPVNode)` |
+
+---
+
+## 历史版本说明
+
+```text
+v7.399.0 曾用于旧构建，但不是 libplacebo 官方稳定 tag/release。
+当前稳定基线是 v7.387.0。
+```
+
+---
+
+## 当前 Release
+
+```text
+tag: native-avcfix-mpv042-ffmpeg9.1-lp7.387.0
+asset: app-release.aar
+```
+
+XNPlayer 使用路径：
 
 ```text
 app/libs/mpv-android-avcfix.aar
 ```
 
-## Current pin and patch
+---
 
-Verified 2026-11-24:
+## 如何验证 AAR
 
-- mpv: `v0.42.0`
-- FFmpeg: `n9.1`, commit `74e4393595cf2b5857f0da925c4e0dd74ea306e5`
-- libplacebo: `v7.387.0`
-- AVC: native PTS patch applied in `.github/workflows/build_avcfix.yml`
-
-`v7.399.0` was an earlier non-release build string and is no longer used.
-
-## AAR ABI compatibility
-
-Verified from the current release asset:
-
-| ABI | Supported | Note |
-|---|---:|---|
-| `arm64-v8a` | Yes | Current AAR contains 10 arm64 native libraries |
-| `armeabi-v7a` | No | Not built into this AAR |
-| `x86` | No | Not built into this AAR |
-| `x86_64` | No | Not built into this AAR |
-| universal | No | This is not a universal AAR |
-
-So this AAR is **v8 only**. It cannot be installed/used as the native core for v7a, x86 or x86_64 builds.
-
-The app repository is also arm64-only.
-
-## Why only arm64
-
-The patched native build was validated for:
+下载 `app-release.aar` 后检查：
 
 ```text
-mpv 0.42.0 + AVC PTS patch + mpvEx JNI event(int, MPVNode)
+1. jni/arm64-v8a/ 下存在 native libraries
+2. 不存在 jni/armeabi-v7a/
+3. 不存在 jni/x86/
+4. 不存在 jni/x86_64/
+5. libmpv.so 中存在 mpv v0.42.0
+6. JNI 类 MPVLib / MPVNode 存在
+7. event(int, MPVNode) 签名存在
 ```
 
-Adding v7a/x86/x86_64 requires:
-
-1. adding ABI build steps to `build_avcfix.yml`
-2. validating JNI for each ABI
-3. producing a multi-ABI AAR or separate per-ABI AARs
-4. changing the app build config
-
-Until then, do not promise v7a/x86 support.
-
-## Workflow
-
-Main workflow:
-
-```text
-.github/workflows/build_avcfix.yml
-```
-
-It:
-
-1. pins mpv to `v0.42.0`
-2. applies the AVC PTS patch
-3. pins FFmpeg and libplacebo
-4. builds arm64 native libraries
-5. uploads `app-release.aar` to the GitHub Release asset
-
-## Do not delete
-
-Do not delete:
-
-- this repository
-- the Release tag `native-avcfix-mpv042-ffmpeg9.1-lp7.387.0`
-- the Release asset `app-release.aar`
-- `.github/workflows/build_avcfix.yml`
-
-Deleting them loses the reproducible source of the AVC-fixed native core.
-
-## Relationship with app repo
-
-Main app repo:
-
-```text
-https://github.com/Tom0324/XNPlayer
-```
-
-This repo produces the native AAR. The app repo assembles the APK.
+以上检查全部通过，才能替换 XNPlayer 中的 AAR。
