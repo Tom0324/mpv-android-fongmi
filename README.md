@@ -6,7 +6,7 @@ This repository is public. It is still a core build dependency and must not be d
 
 ## Purpose
 
-Builds the AAR consumed by `Tom0324/mpvEx-private/app/libs/mpv-android-avcfix.aar`.
+Builds the AAR consumed by `Tom0324/XNPlayer/app/libs/mpv-android-avcfix.aar`.
 
 It owns:
 
@@ -113,7 +113,7 @@ Deleting them loses the reproducible source of the AVC-fixed native core.
 Main app repo:
 
 ```text
-https://github.com/Tom0324/mpvEx-private
+https://github.com/Tom0324/XNPlayer
 ```
 
 This repo produces the native AAR. The app repo assembles the APK.
