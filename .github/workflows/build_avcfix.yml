@@ -1,10 +1,10 @@
-﻿name: Build AVC-fixed mpv AAR (mpvEx JNI)
+name: Build AVC-fixed mpv AAR (mpvEx JNI)
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -81,10 +81,13 @@ jobs:
           ./buildall.sh --arch arm64 mpv
           ./buildall.sh -n
 
-      - name: Upload AAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: mpv-avcfix-aar
-          path: app/build/outputs/aar/app-release.aar
-          if-no-files-found: error
-          retention-days: 30
+      - name: Upload AAR to Release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: native-avcfix-mpv042-ffmpeg9.1-lp7.387.0
+        run: |
+          set -e
+          test -f app/build/outputs/aar/app-release.aar
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --prerelease --title "AVC fixed mpv AAR" --notes "mpv 0.42.0 + AVC PTS patch, FFmpeg n9.1, libplacebo v7.387.0"
+          gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
