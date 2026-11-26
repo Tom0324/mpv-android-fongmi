@@ -8,10 +8,7 @@
 #include <mpv/client.h>
 
 #include <pthread.h>
-
-extern "C" {
-    #include <libavcodec/jni.h>
-}
+#include <dlfcn.h>
 
 #include "log.h"
 #include "jni_utils.h"
@@ -36,6 +33,38 @@ std::atomic<bool> g_event_thread_request_exit(false);
 static pthread_t event_thread_id;
 static jobject global_appctx;
 
+typedef int (*SetJavaVmFn)(JavaVM *, void *);
+typedef int (*SetAndroidAppCtxFn)(jobject, void *);
+
+static void register_java_vm_on_fongmi_ffmpeg(JavaVM *vm, jobject appctx) {
+    // FongMi libmpv reads JavaVM from libffmpeg.so, not from the legacy
+    // split libavutil.so. Resolve these symbols explicitly from libffmpeg.so.
+    static void *ffmpeg = dlopen("libffmpeg.so", RTLD_NOW | RTLD_LOCAL);
+    if (!ffmpeg) {
+        die("failed to dlopen libffmpeg.so");
+        return;
+    }
+
+    auto set_vm = reinterpret_cast<SetJavaVmFn>(dlsym(ffmpeg, "av_jni_set_java_vm"));
+    if (!set_vm) {
+        die("libffmpeg.so has no av_jni_set_java_vm");
+        return;
+    }
+    int result = set_vm(vm, NULL);
+    if (result < 0) {
+        die("av_jni_set_java_vm failed on libffmpeg.so");
+        return;
+    }
+
+    if (appctx) {
+        auto set_ctx = reinterpret_cast<SetAndroidAppCtxFn>(
+            dlsym(ffmpeg, "av_jni_set_android_app_ctx"));
+        if (set_ctx) {
+            set_ctx(appctx, NULL);
+        }
+    }
+}
+
 static void prepare_environment(JNIEnv *env, jobject appctx) {
     setlocale(LC_NUMERIC, "C");
 
@@ -43,13 +72,12 @@ static void prepare_environment(JNIEnv *env, jobject appctx) {
     env->GetJavaVM(&g_vm);
     if (!g_vm)
         die("failed to get jvm");
-    av_jni_set_java_vm(g_vm, NULL);
 
     if (global_appctx)
         env->DeleteGlobalRef(global_appctx);
     global_appctx = env->NewGlobalRef(appctx);
-    if (global_appctx)
-        av_jni_set_android_app_ctx(global_appctx, NULL);
+
+    register_java_vm_on_fongmi_ffmpeg(g_vm, global_appctx);
 
     init_methods_cache(env);
 }

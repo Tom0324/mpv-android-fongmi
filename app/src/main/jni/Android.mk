@@ -13,47 +13,11 @@ ifeq ($(TARGET_ARCH_ABI),x86)
 PREFIX = $(PREFIX_X86)
 endif
 
+# FongMi unified FFmpeg library. JavaVM registration is resolved from this
+# library via dlsym in main.cpp so FongMi libmpv can see it.
 include $(CLEAR_VARS)
-LOCAL_MODULE := libswresample
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
-include $(PREBUILT_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := libpostproc
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
-# only include if library file exists
-ifneq (,$(wildcard $(LOCAL_SRC_FILES)))
-include $(PREBUILT_SHARED_LIBRARY)
-endif
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := libavutil
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
-include $(PREBUILT_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := libavcodec
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
-include $(PREBUILT_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := libavformat
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
-include $(PREBUILT_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := libswscale
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
-include $(PREBUILT_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := libavfilter
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
-include $(PREBUILT_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := libavdevice
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_MODULE := libffmpeg
+LOCAL_SRC_FILES := $(PREFIX)/lib/libffmpeg.so
 LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
@@ -78,6 +42,6 @@ LOCAL_SRC_FILES := \
 	node.cpp \
 	thumbnail.cpp
 LOCAL_LDLIBS    := -llog -lGLESv3 -lEGL -latomic
-LOCAL_SHARED_LIBRARIES := swscale avcodec avformat avutil mpv
+LOCAL_SHARED_LIBRARIES := ffmpeg mpv
 
 include $(BUILD_SHARED_LIBRARY)

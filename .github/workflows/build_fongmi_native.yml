@@ -83,27 +83,40 @@ jobs:
       - name: Download or build deps
         run: buildscripts/include/ci.sh install
 
-      - name: Build native libraries (mpv only, no JNI glue)
+      - name: Build native libraries and patched libplayer.so
+        env:
+          MPV_ANDROID_NATIVE_ONLY: "1"
         run: |
           set -e
-          cd buildscripts
-          ./buildall.sh --arch arm64 mpv
+          buildscripts/include/ci.sh build
 
       - name: Stage native libs for AAR
         run: |
           set -e
           mkdir -p staged/arm64-v8a
-          cp -a buildscripts/prefix/arm64/usr/local/lib/*.so staged/arm64-v8a/
+          cp -a app/src/main/libs/arm64-v8a/*.so staged/arm64-v8a/
+          # Ensure FongMi unified libs are present even if ndk-build copied only dependencies
+          [ -f staged/arm64-v8a/libmpv.so ] || cp -a buildscripts/prefix/arm64/usr/local/lib/libmpv.so staged/arm64-v8a/
+          [ -f staged/arm64-v8a/libffmpeg.so ] || cp -a buildscripts/prefix/arm64/usr/local/lib/libffmpeg.so staged/arm64-v8a/
           ls -lh staged/arm64-v8a/
 
-      - name: Verify AVC + ISO symbols
+      - name: Verify AVC + ISO + JNI symbols
         run: |
           set -e
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
           MPV_SO=staged/arm64-v8a/libmpv.so
+          PLAYER_SO=staged/arm64-v8a/libplayer.so
           test -f "$MPV_SO"
+          test -f "$PLAYER_SO"
           grep -a -q 'stream_info_iso' "$MPV_SO" && echo "FOUND stream_info_iso" || { echo "MISSING stream_info_iso"; exit 1; }
           grep -a -q 'dvdnav_open' "$MPV_SO" && echo "FOUND dvdnav_open" || true
+          READELF=$(find "$GITHUB_WORKSPACE/buildscripts/sdk" -name llvm-readelf -type f | head -1)
+          echo "readelf: $READELF"
+          for sym in getPropertyNode setPropertyNode getPropertyInt setPropertyInt getPropertyDouble setPropertyDouble getPropertyBoolean setPropertyBoolean getPropertyString setPropertyString observeProperty setOptionString command commandNode grabThumbnail grabThumbnailFast setThumbnailJavaVM clearThumbnailCache; do
+            "$READELF" --dyn-syms "$PLAYER_SO" | grep -q "Java_is_xyz_mpv_MPVLib_${sym}$" || { echo "MISSING JNI $sym"; exit 1; }
+          done
+          echo "ALL JNI SYMBOLS OK"
+          "$READELF" --dyn-syms "$PLAYER_SO" | grep ' NEEDED ' || true
 
       - uses: actions/upload-artifact@v4
         with:
