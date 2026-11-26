@@ -21,7 +21,7 @@ jobs:
       - name: Install packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf pkgconf libtool ninja-build python3-pip gperf nasm
+          sudo apt-get install -y autoconf automake pkgconf libtool ninja-build python3-pip gperf nasm
           sudo pip3 install meson --break-system-packages
 
       - name: Pin mpv to v0.42.0 and apply AVC PTS patch

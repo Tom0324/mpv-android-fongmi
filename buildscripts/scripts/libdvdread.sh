@@ -13,7 +13,7 @@ else
 	exit 255
 fi
 
-[ -f configure ] || ./autogen.sh
+[ -f configure ] || autoreconf -fi
 
 mkdir -p $build
 cd $build
