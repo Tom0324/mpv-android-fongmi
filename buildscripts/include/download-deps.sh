@@ -107,8 +107,9 @@ if [ ! -d libdvdnav ]; then
 fi
 
 # libbluray (Blu-ray ISO/menus; needed by mpv -Dlibbluray)
+# --recurse-submodules is required: in-tree libudfread (contrib/libudfread) handles UDF/ISO
 if [ ! -d libbluray ]; then
-	git clone --depth=1 -b "$v_libbluray" https://code.videolan.org/videolan/libbluray.git libbluray
+	git clone --recurse-submodules --depth=1 -b "$v_libbluray" https://code.videolan.org/videolan/libbluray.git libbluray
 fi
 
 cd ..
