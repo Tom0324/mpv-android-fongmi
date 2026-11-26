@@ -96,20 +96,51 @@ fi
 # mpv
 [ ! -d mpv ] && git clone https://github.com/mpv-player/mpv
 
-# libdvdread (DVD ISO reading; needed by mpv -Ddvdnav/-Ddvda)
+# libdvdread (DVD ISO reading) — use FongMi's tarball + iso9660 patch
 if [ ! -d libdvdread ]; then
-	git clone --depth=1 -b "$v_libdvdread" https://code.videolan.org/videolan/libdvdread.git libdvdread
+	mkdir libdvdread
+	$WGET "https://downloads.videolan.org/pub/videolan/libdvdread/${v_libdvdread}/libdvdread-${v_libdvdread}.tar.xz" -O - | \
+		tar -xJ -C libdvdread --strip-components=1
+fi
+dvdread_patch=../patches/libdvdread-7.0.1-iso9660.patch
+if patch --batch --forward --fuzz=0 --dry-run -d libdvdread -p1 < "$dvdread_patch" >/dev/null 2>&1; then
+	patch --batch --forward --fuzz=0 -d libdvdread -p1 < "$dvdread_patch"
+elif ! patch --batch --reverse --fuzz=0 --dry-run -d libdvdread -p1 < "$dvdread_patch" >/dev/null 2>&1; then
+	echo "WARNING: libdvdread iso9660 patch does not apply to $v_libdvdread; continuing without it" >&2
 fi
 
-# libdvdnav (DVD menus + DVD-Video ISO; needed by mpv -Ddvdnav)
+# libdvdnav (DVD menus + ISO) — FongMi's patches add time-search-floor,
+# preserve-stream-callbacks etc. required by stream_iso.c over HTTP.
 if [ ! -d libdvdnav ]; then
-	git clone --depth=1 -b "$v_libdvdnav" https://code.videolan.org/videolan/libdvdnav.git libdvdnav
+	mkdir libdvdnav
+	$WGET "https://downloads.videolan.org/pub/videolan/libdvdnav/${v_libdvdnav}/libdvdnav-${v_libdvdnav}.tar.xz" -O - | \
+		tar -xJ -C libdvdnav --strip-components=1
 fi
+for nav_patch in ../patches/libdvdnav-7.0.0-go-up-hop.patch \
+	../patches/libdvdnav-7.0.0-pgc-cell-duration.patch \
+	../patches/libdvdnav-7.0.0-menu-availability.patch \
+	../patches/libdvdnav-7.0.0-vm-copy-failure.patch \
+	../patches/libdvdnav-7.0.0-time-search-floor.patch \
+	../patches/libdvdnav-7.0.0-menu-audio-count.patch \
+	../patches/libdvdnav-7.0.0-title-chapter-duration.patch \
+	../patches/libdvdnav-7.0.0-preserve-stream-callbacks.patch \
+	../patches/libdvdnav-7.0.0-active-logical-stream.patch \
+	../patches/libdvdnav-7.0.0-title-scope.patch \
+	../patches/libdvdnav-7.0.0-stream-attributes.patch \
+	../patches/libdvdnav-7.0.0-block-replay.patch; do
+	if patch --batch --forward --fuzz=0 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
+		patch --batch --forward --fuzz=0 -d libdvdnav -p1 < "$nav_patch"
+	elif ! patch --batch --reverse --fuzz=0 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
+		echo "WARNING: libdvdnav patch $(basename "$nav_patch") does not apply" >&2
+	fi
+done
 
-# libbluray (Blu-ray ISO/menus; needed by mpv -Dlibbluray)
-# --recurse-submodules is required: in-tree libudfread (contrib/libudfread) handles UDF/ISO
+# libbluray (Blu-ray ISO/menus) — FongMi version + BD-J/seek patches
 if [ ! -d libbluray ]; then
-	git clone --recurse-submodules --depth=1 -b "$v_libbluray" https://code.videolan.org/videolan/libbluray.git libbluray
+	mkdir libbluray
+	$WGET "https://downloads.videolan.org/pub/videolan/libbluray/${v_libbluray}/libbluray-${v_libbluray}.tar.xz" -O - | \
+		tar -xJ -C libbluray --strip-components=1
 fi
+bash ../include/patch-libbluray.sh libbluray
 
 cd ..

@@ -18,11 +18,11 @@ v_mbedtls=3.6.7
 v_libxml2=2.15.4
 v_fontconfig=2.18.3
 v_curl=8.21.0
-# DVD/Blu-ray/ISO playback (mpv 0.42 -Ddvdnav/-Dlibbluray/-Ddvda)
-# mpv 0.42.0 requires dvdread>=7.1.1, dvdnav>=6.1.0, libbluray>=1.0.2
+# DVD/Blu-ray/ISO playback with FongMi HTTP-ISO patches
+# FongMi/mpv requires dvdread>=7.1.1, dvdnav>=6.1.0, libbluray>=1.0.2
 v_libdvdread=7.1.1
 v_libdvdnav=7.0.0
-v_libbluray=1.3.4
+v_libbluray=1.4.1
 
 
 ## Dependency tree
