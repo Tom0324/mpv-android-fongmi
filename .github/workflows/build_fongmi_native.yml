@@ -1,0 +1,105 @@
+name: Build FongMi native libs (ISO over HTTP + AVC fix)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MPV_GIT_URL: https://github.com/FongMi/mpv.git
+  MPV_GIT_REF: fongmi
+  MPV_ANDROID_ARCHES: arm64
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout FongMi mpv source
+        uses: actions/checkout@v4
+        with:
+          repository: FongMi/mpv
+          ref: fongmi
+          path: buildscripts/deps/mpv
+          persist-credentials: false
+
+      - name: Apply mandatory AVC PTS patch
+        run: |
+          set -e
+          python3 - <<'PY'
+          path = 'buildscripts/deps/mpv/player/video.c'
+          src = open(path, encoding='utf-8').read()
+          if 'PATCH: hwdec H.264' in src:
+              print('AVC patch already present')
+              raise SystemExit(0)
+          old = "            frame_time = 0;\n"
+          if 'Invalid video timestamp' not in src or old not in src:
+              raise SystemExit('FATAL: AVC patch anchor missing in FongMi video.c')
+          w = src.index('Invalid video timestamp')
+          pos = src.index(old, w)
+          new = """                    /* PATCH: hwdec H.264 with B-frames emits non-monotonic
+                     * decode-order PTS. Zeroing frame_time breaks adjust_sync
+                     * and causes gradual A/V drift. Synthesize a monotonic PTS
+                     * from container fps and keep a plausible frame_time. */
+                    if (frame_time <= 0) {
+                        float fps = 0;
+                        if (mpctx->vo_chain && mpctx->vo_chain->filter)
+                            fps = mpctx->vo_chain->filter->container_fps;
+                        double est = (fps > 0 && fps < 1000) ? 1.0 / fps : 0;
+                        if (est > 0) {
+                            pts = mpctx->video_pts + est;
+                            frame_time = est;
+                            mpctx->next_frames[0]->pts = pts;
+                        } else {
+                            frame_time = 0;
+                        }
+                    } else {
+                        frame_time = 0;
+                    }
+          """
+          open(path,'w',encoding='utf-8',newline='\n').write(src[:pos]+new+src[pos+len(old):])
+          print('AVC patch applied')
+          PY
+          grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Export env vars
+        run: buildscripts/include/ci.sh export >>$GITHUB_ENV
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake pkgconf libtool ninja-build cmake python3-pip gperf nasm patch ant
+          sudo pip3 install meson --break-system-packages
+
+      - name: Download or build deps
+        run: buildscripts/include/ci.sh install
+
+      - name: Build native libraries
+        env:
+          MPV_ANDROID_NATIVE_ONLY: "1"
+        run: buildscripts/include/ci.sh build
+
+      - name: Verify AVC + ISO symbols
+        run: |
+          set -e
+          grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
+          MPV_SO=$(find buildscripts -name libmpv.so | head -1)
+          echo "libmpv: $MPV_SO"
+          test -n "$MPV_SO"
+          grep -a -q 'stream_info_iso' "$MPV_SO" && echo "FOUND stream_info_iso" || { echo "MISSING stream_info_iso"; exit 1; }
+          grep -a -q 'dvdnav_open' "$MPV_SO" && echo "FOUND dvdnav_open" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fongmi-native-arm64
+          path: app/src/main/libs/**/*.so
+          if-no-files-found: error
