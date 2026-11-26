@@ -26,13 +26,14 @@ markbuilt () {
 }
 
 loadndk () {
+	unset ANDROID_NDK_ROOT
+
 	local ndk="$PWD/sdk/android-ndk-${v_ndk}"
 	local toolchain=$(echo "$ndk/toolchains/llvm/prebuilt/"*)
 	if [ ! -d "$toolchain" ]; then
 		echo "Can't find toolchain inside NDK" >&2
 		return 1
 	fi
-	export ANDROID_NDK_ROOT="$ndk"
 	export PATH="$toolchain/bin:$ndk:$PWD/sdk/bin:$PATH"
 }
 
@@ -155,8 +156,8 @@ build () {
 		pushd deps/$1
 		BUILDSCRIPT=../../scripts/$1.sh
 	fi
-	[ $cleanbuild -eq 1 ] && "$BUILDSCRIPT" clean
-	"$BUILDSCRIPT" build
+	[ $cleanbuild -eq 1 ] && bash "$BUILDSCRIPT" clean
+	bash "$BUILDSCRIPT" build
 	popd
 	markbuilt $1
 }
@@ -216,7 +217,7 @@ fi
 
 # be helpful and list the output APKs (if they exist)
 if wasbuilt "mpv-android"; then
-	ls -lh ../app/build/outputs/apk/{default,allstorage}/*/*.apk || :
+	ls -lh ../app/build/outputs/apk/{default,api29}/*/*.apk || :
 fi
 
 exit 0

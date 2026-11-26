@@ -17,8 +17,6 @@ if [[ "$ndk_triple" == "i686"* ]]; then
 else
 	./scripts/config.py set MBEDTLS_AESNI_C
 fi
-
-# since 3.6.6 mbedTLS defaults to /dev/random, which is known to block unnecessarily
 ./scripts/config.py set MBEDTLS_PLATFORM_DEV_RANDOM '"/dev/urandom"'
 
 make -j$cores no_test

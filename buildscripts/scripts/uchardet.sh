@@ -20,7 +20,7 @@ android_cmake_setup . "$build" \
 	-DBUILD_SHARED_LIBS=OFF \
 	-DCHECK_SSE2=OFF
 
-cmake --build "$build" --target libuchardet --parallel "$cores"
+android_cmake_build "$build"
 android_cmake_install "$build"
 
 pc="$prefix_dir/lib/pkgconfig/uchardet.pc"

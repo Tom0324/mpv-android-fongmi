@@ -4,21 +4,21 @@
 # Make sure to keep v_ndk and v_ndk_n in sync, both are listed on the NDK download page
 
 v_sdk=11076708_latest
-v_ndk=r30
-v_ndk_n=30.0.16248370
-v_sdk_platform=36
-v_sdk_build_tools=36.0.0
+v_ndk=r29
+v_ndk_n=29.0.14206865
+v_sdk_platform=35
+v_sdk_build_tools=35.0.0
 
 v_lua=5.2.4
-v_unibreak=8.0.1
-v_harfbuzz=15.2.0
-v_fribidi=1.0.18
-v_freetype=2.15.0
-v_mbedtls=3.6.8
-v_libxml2=2.15.4
+v_unibreak=7.0
+v_harfbuzz=14.2.1
+v_fribidi=1.0.16
+v_freetype=2.14.3
+v_mbedtls=3.6.7
+v_libxml2=2.15.3
 v_libaribcaption=1.1.1
-v_fontconfig=2.18.4
-v_curl=8.23.0
+v_fontconfig=2.18.2
+v_curl=8.21.0
 v_libbluray=1.4.1
 v_libiconv=1.19
 v_uchardet=0.0.8
@@ -43,8 +43,7 @@ dep_dav1d=()
 dep_libxml2=()
 dep_freetype2=()
 dep_libaribcaption=(freetype2)
-dep_uavs3d=()
-dep_ffmpeg=(mbedtls dav1d libxml2 libaribcaption uavs3d)
+dep_ffmpeg=(mbedtls dav1d libxml2 libaribcaption)
 dep_fontconfig=(libxml2 freetype2)
 dep_fribidi=()
 dep_harfbuzz=()
@@ -54,26 +53,24 @@ dep_lua=()
 dep_shaderc=()
 dep_libplacebo=(shaderc)
 dep_curl=(mbedtls)
-dep_libbluray=(freetype2)
+dep_libbluray=()
 dep_libarchive=(libiconv bzip2 xz zstd)
 dep_libdvdread=()
 dep_libdvdnav=(libdvdread)
 dep_rubberband=()
-dep_mpv_base=(ffmpeg libass lua shaderc curl libbluray libiconv uchardet libarchive libdvdnav rubberband)
-dep_mpv=("${dep_mpv_base[@]}" libplacebo)
+dep_mpv=(ffmpeg libass lua libplacebo curl libbluray libiconv uchardet libarchive libdvdnav rubberband)
 dep_mpv_android=(mpv)
 
 
 ## for CI workflow
 
 # CI resolves these movable branches to immutable commits before selecting a cache.
-v_ci_ffmpeg=release-9.1-fongmi
-v_ci_uavs3d=e72f7c34be2f4de725c1ae498e8c4f3559e99b5b
+v_ci_ffmpeg=release-8.1-fongmi
 v_ci_dav1d=master
 v_ci_libass=master
 v_ci_libplacebo=fongmi
 # bump when the prefix build recipe changes without a dependency version change
-v_ci_prefix=39
+v_ci_prefix=25
 
 # filename used to uniquely identify a build prefix
 ci_tarball="prefix-ndk-${v_ndk}-opengl-vulkan-shaderc-lua-${v_lua}-unibreak-${v_unibreak}-harfbuzz-${v_harfbuzz}-fribidi-${v_fribidi}-freetype-${v_freetype}-libxml2-${v_libxml2}-libaribcaption-${v_libaribcaption}-fontconfig-${v_fontconfig}-mbedtls-${v_mbedtls}-curl-${v_curl}-libbluray-${v_libbluray}-libiconv-${v_libiconv}-uchardet-${v_uchardet}-bzip2-${v_bzip2}-xz-${v_xz}-zstd-${v_zstd}-libarchive-${v_libarchive}-libdvdread-${v_libdvdread}-libdvdnav-${v_libdvdnav}-rubberband-${v_rubberband}-ffmpeg-${v_ci_ffmpeg}-prefix-${v_ci_prefix}.tgz"
