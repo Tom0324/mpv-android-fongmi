@@ -83,23 +83,30 @@ jobs:
       - name: Download or build deps
         run: buildscripts/include/ci.sh install
 
-      - name: Build native libraries
-        env:
-          MPV_ANDROID_NATIVE_ONLY: "1"
-        run: buildscripts/include/ci.sh build
+      - name: Build native libraries (mpv only, no JNI glue)
+        run: |
+          set -e
+          cd buildscripts
+          ./buildall.sh --arch arm64 mpv
+
+      - name: Stage native libs for AAR
+        run: |
+          set -e
+          mkdir -p staged/arm64-v8a
+          cp -a buildscripts/prefix/arm64/usr/local/lib/*.so staged/arm64-v8a/
+          ls -lh staged/arm64-v8a/
 
       - name: Verify AVC + ISO symbols
         run: |
           set -e
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
-          MPV_SO=$(find buildscripts -name libmpv.so | head -1)
-          echo "libmpv: $MPV_SO"
-          test -n "$MPV_SO"
+          MPV_SO=staged/arm64-v8a/libmpv.so
+          test -f "$MPV_SO"
           grep -a -q 'stream_info_iso' "$MPV_SO" && echo "FOUND stream_info_iso" || { echo "MISSING stream_info_iso"; exit 1; }
           grep -a -q 'dvdnav_open' "$MPV_SO" && echo "FOUND dvdnav_open" || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: fongmi-native-arm64
-          path: app/src/main/libs/**/*.so
+          path: staged/**/*.so
           if-no-files-found: error
