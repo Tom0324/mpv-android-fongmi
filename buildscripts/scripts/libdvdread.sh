@@ -13,14 +13,9 @@ else
 	exit 255
 fi
 
-[ -f configure ] || autoreconf -fi
+unset CC CXX
+meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
+	--default-library static -Ddocs=false
 
-mkdir -p $build
-cd $build
-
-../configure \
-	--host=$ndk_triple --with-pic \
-	--enable-static --disable-shared
-
-make -j$cores
-make DESTDIR="$prefix_dir" install
+ninja -C $build -j$cores
+DESTDIR="$prefix_dir" ninja -C $build install

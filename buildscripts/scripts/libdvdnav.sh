@@ -13,15 +13,11 @@ else
 	exit 255
 fi
 
-[ -f configure ] || autoreconf -fi
+unset CC CXX
+# libdvdread is resolved via PKG_CONFIG_LIBDIR -> prefix_dir/lib/pkgconfig
+# (set by buildall.sh), so dependency('dvdread') finds the one built above.
+meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
+	--default-library static -Ddocs=false
 
-mkdir -p $build
-cd $build
-
-# libdvdread is found via PKG_CONFIG_LIBDIR (set by buildall.sh -> prefix_dir/lib/pkgconfig)
-../configure \
-	--host=$ndk_triple --with-pic \
-	--enable-static --disable-shared
-
-make -j$cores
-make DESTDIR="$prefix_dir" install
+ninja -C $build -j$cores
+DESTDIR="$prefix_dir" ninja -C $build install
