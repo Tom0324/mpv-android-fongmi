@@ -81,9 +81,8 @@ jobs:
           grep -n 'stream_info_iso' buildscripts/deps/mpv/stream/stream_iso.c
           grep -n 'force-iso' buildscripts/deps/mpv/options/options.c
           grep -n 'stream_open_bluray_iso' buildscripts/deps/mpv/stream/stream_bluray.c
-          # verify FongMi patches actually applied to libdvdnav (required for HTTP ISO)
-          grep -q 'DVDNAV_HAVE_TIME_SEARCH_FLOOR' buildscripts/deps/libdvdnav/src/dvdnav/dvdnav.h
-          grep -q 'dvdnav_time_search_floor' buildscripts/deps/libdvdnav/src/dvdnav/dvdnav.h
+          # Exact NextPlayerCloud recipe uses vanilla libdvdnav/libdvdread/libbluray tarballs.
+          test -f buildscripts/deps/libdvdnav/src/dvdnav/dvdnav.h
           ls -d buildscripts/deps/libdvdread buildscripts/deps/libdvdnav buildscripts/deps/libbluray
           cd buildscripts
           ./buildall.sh --arch arm64 mpv
