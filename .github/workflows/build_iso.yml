@@ -6,6 +6,7 @@ on:
 env:
   MPV_GIT_URL: https://github.com/NextPlayerCloud/mpv.git
   MPV_GIT_REF: NeoPlayer
+  FFMPEG_GIT_URL: https://github.com/NextPlayerCloud/FFmpeg.git
   MPV_ANDROID_ARCHES: arm64
 
 permissions:
