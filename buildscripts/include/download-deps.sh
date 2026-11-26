@@ -83,7 +83,8 @@ HEREDOC
 if [ ! -d libplacebo ]; then
 	args=()
 	[ $IN_CI -eq 1 ] && args+=(--depth=1 -b "$v_ci_libplacebo")
-	git clone --recursive https://github.com/haasn/libplacebo libplacebo "${args[@]}"
+	# FongMi fork carries the pl_rendered_mix API used by FongMi/mpv
+	git clone --recursive https://github.com/FongMi/libplacebo.git libplacebo "${args[@]}"
 fi
 
 # curl
