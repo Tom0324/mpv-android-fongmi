@@ -17,7 +17,7 @@ unset CC CXX
 # libdvdread is resolved via PKG_CONFIG_LIBDIR -> prefix_dir/lib/pkgconfig
 # (set by buildall.sh), so dependency('dvdread') finds the one built above.
 meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
-	--default-library static -Ddocs=false
+	--default-library static
 
 ninja -C $build -j$cores
 DESTDIR="$prefix_dir" ninja -C $build install
