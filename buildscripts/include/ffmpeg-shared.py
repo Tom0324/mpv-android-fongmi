@@ -7,6 +7,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 
 
 LIBRARIES = ("avdevice", "avfilter", "avformat", "avcodec",
@@ -75,7 +76,9 @@ def consolidate(build_dir, prefix, cxx, ldflags, libraries, tool):
                 raise ValueError(f"Missing or duplicate {field} in {pc}")
         metadata[pc] = text
     if not DOVI_SYMBOLS <= expected.keys():
-        raise ValueError("FFmpeg is missing the Dolby Vision RPU parser API")
+        print("WARN: FFmpeg is missing the Dolby Vision RPU parser API "
+              "(expected with release-8.1-fongmi recipe)",
+              file=sys.stderr)
 
     # Expanding each library's map against its own shared build avoids assigning
     # av* symbols from another library to the wrong LIBAV*_major version node.
