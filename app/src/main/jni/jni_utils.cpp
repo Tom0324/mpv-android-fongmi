@@ -1,16 +1,6 @@
 #define UTIL_EXTERN
 #include "jni_utils.h"
 
-jclass java_util_ArrayList, java_util_HashMap;
-jmethodID java_util_ArrayList_init, java_util_ArrayList_add,
-    java_util_HashMap_init, java_util_HashMap_put;
-jclass mpv_MPVNode_None, mpv_MPVNode_StringNode, mpv_MPVNode_BooleanNode,
-    mpv_MPVNode_IntNode, mpv_MPVNode_DoubleNode, mpv_MPVNode_ArrayNode, mpv_MPVNode_MapNode, mpv_MPVNode;
-jfieldID mpv_MPVNode_None_INSTANCE;
-jmethodID mpv_MPVNode_StringNode_init, mpv_MPVNode_BooleanNode_init,
-    mpv_MPVNode_IntNode_init, mpv_MPVNode_DoubleNode_init,
-    mpv_MPVNode_ArrayNode_init, mpv_MPVNode_MapNode_init;
-
 #include <jni.h>
 #include <stdint.h>
 #include <string.h>
