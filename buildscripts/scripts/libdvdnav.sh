@@ -7,17 +7,18 @@ build=_build$ndk_suffix
 if [ "$1" == "build" ]; then
 	true
 elif [ "$1" == "clean" ]; then
-	rm -rf $build
+	rm -rf "$build"
 	exit 0
 else
 	exit 255
 fi
 
-unset CC CXX
-# libdvdread is resolved via PKG_CONFIG_LIBDIR -> prefix_dir/lib/pkgconfig
-# (set by buildall.sh), so dependency('dvdread') finds the one built above.
-meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
-	--default-library static
+unset CC CXX # meson wants these unset
 
-ninja -C $build -j$cores
-DESTDIR="$prefix_dir" ninja -C $build install
+meson setup "$build" --cross-file "$prefix_dir"/crossfile.txt \
+	--default-library static \
+	-Denable_docs=false \
+	-Denable_examples=false
+
+ninja -C "$build" -j"$cores"
+DESTDIR="$prefix_dir" ninja -C "$build" install

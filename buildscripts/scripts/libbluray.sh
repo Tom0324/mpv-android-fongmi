@@ -13,21 +13,35 @@ else
 	exit 255
 fi
 
-[ -f configure ] || ./bootstrap
+unset CC CXX # meson wants these unset
 
-mkdir -p $build
-cd $build
+# libbluray 1.4.1 maps aarch64 to the 32-bit Java directory. Android JREs
+# place libjvm.so under lib/aarch64/server.
+if grep -q "java_arch = 'arm'" meson.build; then
+	${SED:-sed} -i.bak "/^elif host_machine.cpu_family() == 'aarch64'$/,/^elif / s/java_arch = 'arm'/java_arch = 'aarch64'/" meson.build
+	rm -f meson.build.bak
+fi
+if [ "$ndk_suffix" = _arm64 ] && ! grep -A1 "^elif host_machine.cpu_family() == 'aarch64'$" meson.build | grep -q "java_arch = 'aarch64'"; then
+	echo "libbluray aarch64 JVM search path was not patched" >&2
+	exit 1
+fi
 
-# Minimal static build for Android:
-#  - in-tree libudfread provides ISO/UDF reading (--without-external-libudfread)
-#  - disable BD-J jar/fontconfig/freetype/libxml2 to avoid Android-hostile deps
-#  - mpv only needs libbluray core (disc navigation + ISO), not the Java menu UI
-../configure \
-	--host=$ndk_triple --with-pic \
-	--enable-static --disable-shared \
-	--disable-bdjava-jar \
-	--without-libxml2 --without-freetype --without-fontconfig \
-	--without-external-libudfread
+meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
+	-Denable_tools=false \
+	-Denable_docs=false \
+	-Denable_devtools=false \
+	-Denable_examples=false \
+	-Dbdj_jar=disabled \
+	-Dembed_udfread=false \
+	-Dfontconfig=disabled \
+	-Dfreetype=enabled \
+	-Dlibxml2=disabled
 
-make -j$cores
-make DESTDIR="$prefix_dir" install
+ninja -C $build -j$cores
+DESTDIR="$prefix_dir" ninja -C $build install
+
+pc="$prefix_dir/lib/pkgconfig/libbluray.pc"
+if ! grep -q -- "-ludfread" "$pc"; then
+	${SED:-sed} -i.bak '/^Libs:/ s/$/ -ludfread/' "$pc"
+	rm -f "$pc.bak"
+fi
