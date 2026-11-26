@@ -21,7 +21,8 @@ fi
 if [ ! -d ffmpeg ]; then
 	args=()
 	[ $IN_CI -eq 1 ] && args+=(--depth=1 -b "$v_ci_ffmpeg")
-	git clone https://github.com/FFmpeg/FFmpeg ffmpeg "${args[@]}"
+	# FongMi fork provides av_mediacodec_release_buffer_status() used by FongMi/mpv
+	git clone https://github.com/FongMi/FFmpeg.git ffmpeg "${args[@]}"
 fi
 
 # freetype2

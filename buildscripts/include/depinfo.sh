@@ -51,7 +51,7 @@ dep_mpv_android=(mpv)
 ## for CI workflow
 
 # pinned ffmpeg revision
-v_ci_ffmpeg=n9.1
+v_ci_ffmpeg=release-9.1-fongmi
 # pinned libplacebo revision
 v_ci_libplacebo=fongmi
 
