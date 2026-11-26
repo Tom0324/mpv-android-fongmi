@@ -128,9 +128,9 @@ for nav_patch in ../patches/libdvdnav-7.0.0-go-up-hop.patch \
 	../patches/libdvdnav-7.0.0-title-scope.patch \
 	../patches/libdvdnav-7.0.0-stream-attributes.patch \
 	../patches/libdvdnav-7.0.0-block-replay.patch; do
-	if patch --batch --forward --fuzz=0 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
-		patch --batch --forward --fuzz=0 -d libdvdnav -p1 < "$nav_patch"
-	elif ! patch --batch --reverse --fuzz=0 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
+	if patch --batch --forward --fuzz=3 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
+		patch --batch --forward --fuzz=3 -d libdvdnav -p1 < "$nav_patch"
+	elif ! patch --batch --reverse --fuzz=3 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
 		echo "WARNING: libdvdnav patch $(basename "$nav_patch") does not apply" >&2
 	fi
 done
