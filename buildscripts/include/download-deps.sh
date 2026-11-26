@@ -5,7 +5,78 @@
 [ -z "$IN_CI" ] && IN_CI=0
 [ -z "$WGET" ] && WGET=wget
 
+case "${1:-all}" in
+	all|base|libplacebo) scope=${1:-all} ;;
+	*) echo "Unknown dependency scope: $1" >&2; exit 1 ;;
+esac
+
 mkdir -p deps && cd deps
+
+clone_ci_commit() {
+	local repository=$1
+	local expected_commit=$2
+	local directory=$3
+	local clone_mode=${4:-}
+
+	if ! (
+		set -e
+		git init -q "$directory"
+		git -C "$directory" remote add origin "$repository"
+		git -C "$directory" fetch -q --depth=1 origin "$expected_commit"
+		git -C "$directory" checkout -q --detach FETCH_HEAD
+		if [[ "$clone_mode" == recursive ]]; then
+			git -C "$directory" submodule update -q \
+				--init --recursive --depth=1
+		fi
+		[[ $(git -C "$directory" rev-parse --verify 'HEAD^{commit}') == \
+			"$expected_commit" ]]
+	); then
+		echo "Failed to check out $repository commit $expected_commit." >&2
+		rm -rf "$directory"
+		return 1
+	fi
+}
+
+download_libplacebo() {
+	local actual_commit source_status submodule_status
+	if [ "$IN_CI" -eq 1 ]; then
+		: "${LIBPLACEBO_GIT_COMMIT:?LIBPLACEBO_GIT_COMMIT must be set in CI}"
+	fi
+	if [ ! -d libplacebo ]; then
+		if [ "$IN_CI" -eq 1 ]; then
+			clone_ci_commit \
+				"${LIBPLACEBO_GIT_URL:-https://github.com/FongMi/libplacebo.git}" \
+				"$LIBPLACEBO_GIT_COMMIT" libplacebo recursive
+		else
+			git clone --recursive --branch "$v_ci_libplacebo" \
+				"${LIBPLACEBO_GIT_URL:-https://github.com/FongMi/libplacebo.git}" libplacebo
+		fi
+	fi
+
+	if [ "$IN_CI" -eq 1 ]; then
+		if [ ! -e libplacebo/.git ] ||
+			! actual_commit=$(git -C libplacebo rev-parse --verify 'HEAD^{commit}') ||
+			[[ "$actual_commit" != "$LIBPLACEBO_GIT_COMMIT" ]]; then
+			echo "libplacebo source revision does not match LIBPLACEBO_GIT_COMMIT." >&2
+			exit 1
+		fi
+		if ! source_status=$(git -C libplacebo status --porcelain \
+			--untracked-files=all --ignore-submodules=none) || [[ -n "$source_status" ]]; then
+			echo "libplacebo source must be clean before building in CI." >&2
+			exit 1
+		fi
+		if ! submodule_status=$(git -C libplacebo submodule status --recursive) ||
+			grep -q '^[-+U]' <<< "$submodule_status"; then
+			echo "libplacebo submodules must match their pinned revisions in CI." >&2
+			exit 1
+		fi
+	fi
+}
+
+if [[ "$scope" == libplacebo ]]; then
+	download_libplacebo
+	exit 0
+fi
 
 # mbedtls
 if [ ! -d mbedtls ]; then
@@ -15,14 +86,49 @@ if [ ! -d mbedtls ]; then
 fi
 
 # dav1d
-[ ! -d dav1d ] && git clone https://github.com/videolan/dav1d
+if [ ! -d dav1d ]; then
+	if [ "$IN_CI" -eq 1 ]; then
+		: "${DAV1D_GIT_COMMIT:?DAV1D_GIT_COMMIT must be set in CI}"
+		clone_ci_commit \
+			"${DAV1D_GIT_URL:-https://github.com/videolan/dav1d}" \
+			"$DAV1D_GIT_COMMIT" dav1d
+	else
+		git clone --branch "$v_ci_dav1d" \
+			"${DAV1D_GIT_URL:-https://github.com/videolan/dav1d}" dav1d
+	fi
+fi
 
 # ffmpeg
+if [ "$IN_CI" -eq 1 ]; then
+	: "${FFMPEG_GIT_COMMIT:?FFMPEG_GIT_COMMIT must be set in CI}"
+fi
 if [ ! -d ffmpeg ]; then
-	args=()
-	[ $IN_CI -eq 1 ] && args+=(--depth=1 -b "$v_ci_ffmpeg")
-	# FongMi fork provides av_mediacodec_release_buffer_status() used by FongMi/mpv
-	git clone https://github.com/FongMi/FFmpeg.git ffmpeg "${args[@]}"
+	if [ "$IN_CI" -eq 1 ]; then
+		clone_ci_commit \
+			"${FFMPEG_GIT_URL:-https://github.com/FongMi/FFmpeg.git}" \
+			"$FFMPEG_GIT_COMMIT" ffmpeg
+	else
+		git clone --branch "$v_ci_ffmpeg" \
+			"${FFMPEG_GIT_URL:-https://github.com/FongMi/FFmpeg.git}" ffmpeg
+	fi
+fi
+
+if [ "$IN_CI" -eq 1 ]; then
+	if [ ! -e ffmpeg/.git ] ||
+		! actual_commit=$(git -C ffmpeg rev-parse --verify 'HEAD^{commit}') ||
+		[[ "$actual_commit" != "$FFMPEG_GIT_COMMIT" ]]; then
+		echo "FFmpeg source revision does not match FFMPEG_GIT_COMMIT." >&2
+		exit 1
+	fi
+fi
+
+# AVS3 baseline decoder. Keep the checked-out revision fixed across both Android ABIs.
+if [ ! -d uavs3d ]; then
+	clone_ci_commit https://github.com/uavs3/uavs3d.git "$v_ci_uavs3d" uavs3d
+fi
+if [ "$(git -C uavs3d rev-parse HEAD)" != "$v_ci_uavs3d" ]; then
+	echo "uavs3d source revision does not match the pinned build dependency." >&2
+	exit 1
 fi
 
 # freetype2
@@ -56,6 +162,13 @@ if [ ! -d libxml2 ]; then
 		tar -xz -C libxml2 --strip-components=1
 fi
 
+# libaribcaption
+if [ ! -d libaribcaption ]; then
+	mkdir libaribcaption
+	$WGET https://github.com/xqq/libaribcaption/archive/refs/tags/v${v_libaribcaption}.tar.gz -O - | \
+		tar -xz -C libaribcaption --strip-components=1
+fi
+
 # fontconfig
 if [ ! -d fontconfig ]; then
 	mkdir fontconfig
@@ -63,62 +176,78 @@ if [ ! -d fontconfig ]; then
 		tar -xz -C fontconfig --strip-components=1
 fi
 
-# libass
-[ ! -d libass ] && git clone https://github.com/libass/libass
+# libbluray
+if [ ! -d libbluray ]; then
+	mkdir libbluray
+	$WGET https://downloads.videolan.org/pub/videolan/libbluray/${v_libbluray}/libbluray-${v_libbluray}.tar.xz -O - | \
+		tar -xJ -C libbluray --strip-components=1
+fi
+../include/patch-libbluray.sh libbluray
 
-# lua
-if [ ! -d lua ]; then
-	mkdir lua
-	$WGET https://www.lua.org/ftp/lua-$v_lua.tar.gz -O - | \
-		tar -xz -C lua --strip-components=1
+# libiconv
+if [ ! -d libiconv ]; then
+	mkdir libiconv
+	$WGET https://mirrors.ocf.berkeley.edu/gnu/libiconv/libiconv-${v_libiconv}.tar.gz -O - | \
+		tar -xz -C libiconv --strip-components=1
 fi
 
-# shaderc
-mkdir -p shaderc
-cat >shaderc/README <<'HEREDOC'
-shaderc sources are provided by the NDK
-see <ndk>/sources/third_party/shaderc
-HEREDOC
-
-# libplacebo
-if [ ! -d libplacebo ]; then
-	args=()
-	[ $IN_CI -eq 1 ] && args+=(--depth=1 -b "$v_ci_libplacebo")
-	# FongMi fork carries the pl_rendered_mix API used by FongMi/mpv
-	git clone --recursive https://github.com/FongMi/libplacebo.git libplacebo "${args[@]}"
+# uchardet
+if [ ! -d uchardet ]; then
+	mkdir uchardet
+	$WGET https://gitlab.freedesktop.org/uchardet/uchardet/-/archive/v${v_uchardet}/uchardet-v${v_uchardet}.tar.gz -O - | \
+		tar -xz -C uchardet --strip-components=1
 fi
 
-# curl
-if [ ! -d curl ]; then
-	mkdir curl
-	$WGET https://curl.se/download/curl-$v_curl.tar.gz -O - | \
-		tar -xz -C curl --strip-components=1
+# bzip2
+if [ ! -d bzip2 ]; then
+	mkdir bzip2
+	$WGET https://sourceware.org/pub/bzip2/bzip2-${v_bzip2}.tar.gz -O - | \
+		tar -xz -C bzip2 --strip-components=1
 fi
 
-# mpv
-[ ! -d mpv ] && git clone https://github.com/mpv-player/mpv
+# xz
+if [ ! -d xz ]; then
+	mkdir xz
+	$WGET https://github.com/tukaani-project/xz/releases/download/v${v_xz}/xz-${v_xz}.tar.xz -O - | \
+		tar -xJ -C xz --strip-components=1
+fi
 
-# libdvdread (DVD ISO reading) — use FongMi's tarball + iso9660 patch
+# zstd
+if [ ! -d zstd ]; then
+	mkdir zstd
+	$WGET https://github.com/facebook/zstd/releases/download/v${v_zstd}/zstd-${v_zstd}.tar.gz -O - | \
+		tar -xz -C zstd --strip-components=1
+fi
+
+# libarchive
+if [ ! -d libarchive ]; then
+	mkdir libarchive
+	$WGET https://github.com/libarchive/libarchive/releases/download/v${v_libarchive}/libarchive-${v_libarchive}.tar.xz -O - | \
+		tar -xJ -C libarchive --strip-components=1
+fi
+
+# libdvdread
 if [ ! -d libdvdread ]; then
 	mkdir libdvdread
-	$WGET "https://downloads.videolan.org/pub/videolan/libdvdread/${v_libdvdread}/libdvdread-${v_libdvdread}.tar.xz" -O - | \
+	$WGET https://downloads.videolan.org/pub/videolan/libdvdread/${v_libdvdread}/libdvdread-${v_libdvdread}.tar.xz -O - | \
 		tar -xJ -C libdvdread --strip-components=1
 fi
-dvdread_patch=../patches/libdvdread-7.0.1-iso9660.patch
-if patch --batch --forward --fuzz=0 --dry-run -d libdvdread -p1 < "$dvdread_patch" >/dev/null 2>&1; then
-	patch --batch --forward --fuzz=0 -d libdvdread -p1 < "$dvdread_patch"
-elif ! patch --batch --reverse --fuzz=0 --dry-run -d libdvdread -p1 < "$dvdread_patch" >/dev/null 2>&1; then
-	echo "WARNING: libdvdread iso9660 patch does not apply to $v_libdvdread; continuing without it" >&2
+
+libdvdread_patch=../patches/libdvdread-7.0.1-iso9660.patch
+if patch --batch --forward --fuzz=0 --dry-run -d libdvdread -p1 < "$libdvdread_patch" >/dev/null 2>&1; then
+	patch --batch --forward --fuzz=0 -d libdvdread -p1 < "$libdvdread_patch"
+elif ! patch --batch --reverse --fuzz=0 --dry-run -d libdvdread -p1 < "$libdvdread_patch" >/dev/null 2>&1; then
+	echo "libdvdread source does not match $libdvdread_patch." >&2
+	exit 1
 fi
 
-# libdvdnav (DVD menus + ISO) — FongMi's patches add time-search-floor,
-# preserve-stream-callbacks etc. required by stream_iso.c over HTTP.
+# libdvdnav
 if [ ! -d libdvdnav ]; then
 	mkdir libdvdnav
-	$WGET "https://downloads.videolan.org/pub/videolan/libdvdnav/${v_libdvdnav}/libdvdnav-${v_libdvdnav}.tar.xz" -O - | \
+	$WGET https://downloads.videolan.org/pub/videolan/libdvdnav/${v_libdvdnav}/libdvdnav-${v_libdvdnav}.tar.xz -O - | \
 		tar -xJ -C libdvdnav --strip-components=1
 fi
-for nav_patch in ../patches/libdvdnav-7.0.0-go-up-hop.patch \
+for libdvdnav_patch in ../patches/libdvdnav-7.0.0-go-up-hop.patch \
 	../patches/libdvdnav-7.0.0-pgc-cell-duration.patch \
 	../patches/libdvdnav-7.0.0-menu-availability.patch \
 	../patches/libdvdnav-7.0.0-vm-copy-failure.patch \
@@ -130,19 +259,117 @@ for nav_patch in ../patches/libdvdnav-7.0.0-go-up-hop.patch \
 	../patches/libdvdnav-7.0.0-title-scope.patch \
 	../patches/libdvdnav-7.0.0-stream-attributes.patch \
 	../patches/libdvdnav-7.0.0-block-replay.patch; do
-	if patch --batch --forward --fuzz=3 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
-		patch --batch --forward --fuzz=3 -d libdvdnav -p1 < "$nav_patch"
-	elif ! patch --batch --reverse --fuzz=3 --dry-run -d libdvdnav -p1 < "$nav_patch" >/dev/null 2>&1; then
-		echo "WARNING: libdvdnav patch $(basename "$nav_patch") does not apply" >&2
+	if patch --batch --forward --fuzz=0 --dry-run -d libdvdnav -p1 < "$libdvdnav_patch" >/dev/null 2>&1; then
+		patch --batch --forward --fuzz=0 -d libdvdnav -p1 < "$libdvdnav_patch"
+	elif ! patch --batch --reverse --fuzz=0 --dry-run -d libdvdnav -p1 < "$libdvdnav_patch" >/dev/null 2>&1; then
+		echo "libdvdnav source does not match $libdvdnav_patch." >&2
+		exit 1
 	fi
 done
 
-# libbluray (Blu-ray ISO/menus) — FongMi version + BD-J/seek patches
-if [ ! -d libbluray ]; then
-	mkdir libbluray
-	$WGET "https://downloads.videolan.org/pub/videolan/libbluray/${v_libbluray}/libbluray-${v_libbluray}.tar.xz" -O - | \
-		tar -xJ -C libbluray --strip-components=1
+# rubberband
+if [ ! -d rubberband ]; then
+	mkdir rubberband
+	$WGET https://github.com/breakfastquay/rubberband/archive/refs/tags/v${v_rubberband}.tar.gz -O - | \
+		tar -xz -C rubberband --strip-components=1
 fi
-bash ../include/patch-libbluray.sh libbluray
+
+# libass
+if [ "$IN_CI" -eq 1 ]; then
+	: "${LIBASS_GIT_COMMIT:?LIBASS_GIT_COMMIT must be set in CI}"
+fi
+if [ ! -d libass ]; then
+	if [ "$IN_CI" -eq 1 ]; then
+		clone_ci_commit \
+			"${LIBASS_GIT_URL:-https://github.com/libass/libass}" \
+			"$LIBASS_GIT_COMMIT" libass
+	else
+		git clone --branch "$v_ci_libass" \
+			"${LIBASS_GIT_URL:-https://github.com/libass/libass}" libass
+	fi
+fi
+if [ "$IN_CI" -eq 1 ]; then
+	if [ ! -e libass/.git ] ||
+		! actual_commit=$(git -C libass rev-parse --verify 'HEAD^{commit}') ||
+		[[ "$actual_commit" != "$LIBASS_GIT_COMMIT" ]]; then
+		echo "libass source revision does not match LIBASS_GIT_COMMIT." >&2
+		exit 1
+	fi
+fi
+for libass_patch in ../patches/libass-font-size-em.patch \
+                    ../patches/libass-line-height.patch \
+                    ../patches/libass-font-file.patch; do
+	if patch --batch --forward --fuzz=0 --dry-run -d libass -p1 < "$libass_patch" >/dev/null 2>&1; then
+		patch --batch --forward --fuzz=0 -d libass -p1 < "$libass_patch"
+	elif ! patch --batch --reverse --fuzz=0 --dry-run -d libass -p1 < "$libass_patch" >/dev/null 2>&1; then
+		echo "libass source does not match $libass_patch." >&2
+		exit 1
+	fi
+done
+
+# lua
+check_sha256() {
+	local digest
+	if command -v sha256sum >/dev/null; then
+		digest=$(sha256sum "$1")
+	else
+		digest=$(shasum -a 256 "$1")
+	fi
+	[[ ${digest%% *} == "$2" ]]
+}
+
+download_lua() {
+	local archive=lua-$v_lua.tar.gz
+	local checksum=b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b
+	local url
+
+	for url in \
+		"https://www.lua.org/ftp/$archive" \
+		"https://mirror.bazel.build/www.lua.org/ftp/$archive"
+	do
+		rm -f "$archive"
+		if $WGET "$url" -O "$archive" && check_sha256 "$archive" "$checksum"
+		then
+			rm -rf lua
+			mkdir lua
+			if tar -xz -C lua --strip-components=1 -f "$archive"; then
+				rm "$archive"
+				return 0
+			fi
+		fi
+	done
+
+	rm -rf lua "$archive"
+	return 1
+}
+
+if [ ! -f lua/src/lua.h ]; then
+	download_lua
+fi
+
+# shaderc is built from the NDK-provided sources; this placeholder keeps it in
+# the dependency graph without cloning an extra copy.
+mkdir -p shaderc
+
+# curl
+if [ ! -d curl ]; then
+	mkdir curl
+	$WGET https://curl.se/download/curl-$v_curl.tar.gz -O - | \
+		tar -xz -C curl --strip-components=1
+fi
+
+if [[ "$scope" == all ]]; then
+	download_libplacebo
+
+	# mpv
+	: "${MPV_GIT_URL:=https://github.com/FongMi/mpv.git}"
+	if [ ! -d mpv ]; then
+		if [ -n "$MPV_GIT_REF" ]; then
+			git clone --branch "$MPV_GIT_REF" "$MPV_GIT_URL" mpv
+		else
+			git clone "$MPV_GIT_URL" mpv
+		fi
+	fi
+fi
 
 cd ..

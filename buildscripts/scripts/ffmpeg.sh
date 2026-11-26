@@ -1,11 +1,13 @@
 #!/bin/bash -e
 
 . ../../include/path.sh
+. ../../include/depinfo.sh
+. ../../include/cmake-android.sh
 
 if [ "$1" == "build" ]; then
 	true
 elif [ "$1" == "clean" ]; then
-	rm -rf _build$ndk_suffix
+	rm -rf _build$ndk_suffix _build_arcdav3a$ndk_suffix
 	exit 0
 else
 	exit 255
@@ -22,14 +24,40 @@ cpu=armv7-a
 cpuflags=
 [[ "$ndk_triple" == "arm"* ]] && cpuflags="$cpuflags -mfpu=neon -mcpu=cortex-a8"
 
+audio_filters=(acompressor alimiter dynaudnorm equalizer pan silenceremove stereotools volume)
+audio_filter_args=()
+for filter in "${audio_filters[@]}"; do
+	audio_filter_args+=(--enable-filter="$filter")
+done
+
+if ! grep -q -- "--enable-libarcdav3a" ../configure; then
+	echo "FFmpeg source does not contain libarcdav3a support. Update the pinned FFmpeg branch." >&2
+	exit 1
+fi
+if ! grep -q -- "--enable-libuavs3d" ../configure; then
+	echo "FFmpeg source does not contain libuavs3d support." >&2
+	exit 1
+fi
+
+av3a_source="../dependency/avs3a"
+av3a_build="../_build_arcdav3a$ndk_suffix"
+if [ ! -f "$av3a_source/CMakeLists.txt" ]; then
+	echo "FFmpeg source does not contain dependency/avs3a. Update the pinned FFmpeg branch." >&2
+	exit 1
+fi
+android_cmake_setup "$av3a_source" "$av3a_build" -DBUILD_SHARED_LIBS=OFF
+android_cmake_build "$av3a_build"
+android_cmake_install "$av3a_build"
+
 args=(
 	--target-os=android --enable-cross-compile
 	--cross-prefix=$ndk_triple- --cc=$CC --pkg-config=pkg-config --nm=llvm-nm
+	--ar=$AR --ranlib=$RANLIB
 	--arch=${ndk_triple%%-*} --cpu=$cpu
 	--extra-cflags="-I$prefix_dir/include $cpuflags" --extra-ldflags="-L$prefix_dir/lib"
 
-	--enable-{jni,mediacodec,mbedtls,libdav1d,libxml2} --disable-vulkan
-	--disable-static --enable-shared --enable-{gpl,version3}
+	--enable-{jni,mediacodec,mbedtls,libdav1d,libxml2,libaribcaption,libarcdav3a,libuavs3d} --disable-vulkan
+	--enable-{static,shared,pic,gpl,version3}
 
 	# disable unneeded parts
 	--disable-{stripping,doc,programs}
@@ -39,10 +67,20 @@ args=(
 	--disable-{muxers,encoders,devices}
 	# useful to taking screenshots
 	--enable-encoder=mjpeg,png
-	# useful for the `dump-cache` command
-	--enable-muxer=mov,matroska,mpegts
+	# required by TV audio settings through mpv's lavfi audio filter chain
+	"${audio_filter_args[@]}"
+	# useful for the `dump-cache` command and mpv audio passthrough
+	--enable-muxer=mov,matroska,mpegts,spdif
 )
 ../configure "${args[@]}"
 
 make -j$cores
 make DESTDIR="$prefix_dir" install
+
+# Keep the individual shared builds as the exact public symbol/version reference.
+# Only the aggregate library is installed for mpv and the Media3 consumers.
+pkg-config --libs --static libavdevice libavfilter libavformat libavcodec \
+	libswresample libswscale libavutil > ffmpeg-shared.libs
+python3 ../../../include/ffmpeg-shared.py link --build-dir "$PWD" \
+	--prefix "$prefix_dir" --cxx "$CXX" --ldflags="$LDFLAGS" \
+	--libs-file ffmpeg-shared.libs

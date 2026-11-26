@@ -10,28 +10,41 @@ v_sdk_platform=36
 v_sdk_build_tools=36.0.0
 
 v_lua=5.2.4
-v_unibreak=8.0
-v_harfbuzz=14.4.0
-v_fribidi=1.0.16
-v_freetype=2.14.3
-v_mbedtls=3.6.7
+v_unibreak=8.0.1
+v_harfbuzz=15.2.0
+v_fribidi=1.0.18
+v_freetype=2.15.0
+v_mbedtls=3.6.8
 v_libxml2=2.15.4
-v_fontconfig=2.18.3
-v_curl=8.21.0
-# DVD/Blu-ray/ISO playback with FongMi HTTP-ISO patches
-# FongMi/mpv requires dvdread>=7.1.1, dvdnav>=6.1.0, libbluray>=1.0.2
-v_libdvdread=7.1.1
-v_libdvdnav=7.0.0
+v_libaribcaption=1.1.1
+v_fontconfig=2.18.4
+v_curl=8.23.0
 v_libbluray=1.4.1
+v_libiconv=1.19
+v_uchardet=0.0.8
+v_bzip2=1.0.8
+v_xz=5.8.1
+v_zstd=1.5.7
+v_libarchive=3.8.7
+v_libdvdread=7.0.1
+v_libdvdnav=7.0.0
+v_rubberband=4.0.0
 
 
 ## Dependency tree
 
+dep_libiconv=()
+dep_uchardet=(libiconv)
+dep_bzip2=()
+dep_xz=()
+dep_zstd=()
 dep_mbedtls=()
 dep_dav1d=()
 dep_libxml2=()
-dep_ffmpeg=(mbedtls dav1d libxml2)
 dep_freetype2=()
+dep_libaribcaption=(freetype2)
+dep_uavs3d=()
+dep_ffmpeg=(mbedtls dav1d libxml2 libaribcaption uavs3d)
 dep_fontconfig=(libxml2 freetype2)
 dep_fribidi=()
 dep_harfbuzz=()
@@ -41,19 +54,26 @@ dep_lua=()
 dep_shaderc=()
 dep_libplacebo=(shaderc)
 dep_curl=(mbedtls)
+dep_libbluray=(freetype2)
+dep_libarchive=(libiconv bzip2 xz zstd)
 dep_libdvdread=()
 dep_libdvdnav=(libdvdread)
-dep_libbluray=()
-dep_mpv=(ffmpeg libass lua libplacebo curl libdvdread libdvdnav libbluray)
+dep_rubberband=()
+dep_mpv_base=(ffmpeg libass lua shaderc curl libbluray libiconv uchardet libarchive libdvdnav rubberband)
+dep_mpv=("${dep_mpv_base[@]}" libplacebo)
 dep_mpv_android=(mpv)
 
 
 ## for CI workflow
 
-# pinned ffmpeg revision
+# CI resolves these movable branches to immutable commits before selecting a cache.
 v_ci_ffmpeg=release-9.1-fongmi
-# pinned libplacebo revision
+v_ci_uavs3d=e72f7c34be2f4de725c1ae498e8c4f3559e99b5b
+v_ci_dav1d=master
+v_ci_libass=master
 v_ci_libplacebo=fongmi
+# bump when the prefix build recipe changes without a dependency version change
+v_ci_prefix=39
 
 # filename used to uniquely identify a build prefix
-ci_tarball="prefix-n${v_ndk}-l${v_lua}-u${v_unibreak}-h${v_harfbuzz}-fr${v_fribidi}-ft${v_freetype}-x${v_libxml2}-fo${v_fontconfig}-m${v_mbedtls}-c${v_curl}-ff${v_ci_ffmpeg}-lp${v_ci_libplacebo}.tgz"
+ci_tarball="prefix-ndk-${v_ndk}-opengl-vulkan-shaderc-lua-${v_lua}-unibreak-${v_unibreak}-harfbuzz-${v_harfbuzz}-fribidi-${v_fribidi}-freetype-${v_freetype}-libxml2-${v_libxml2}-libaribcaption-${v_libaribcaption}-fontconfig-${v_fontconfig}-mbedtls-${v_mbedtls}-curl-${v_curl}-libbluray-${v_libbluray}-libiconv-${v_libiconv}-uchardet-${v_uchardet}-bzip2-${v_bzip2}-xz-${v_xz}-zstd-${v_zstd}-libarchive-${v_libarchive}-libdvdread-${v_libdvdread}-libdvdnav-${v_libdvdnav}-rubberband-${v_rubberband}-ffmpeg-${v_ci_ffmpeg}-prefix-${v_ci_prefix}.tgz"

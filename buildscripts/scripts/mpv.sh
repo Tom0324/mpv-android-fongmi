@@ -1,42 +1,112 @@
 #!/bin/bash -e
+set -o pipefail
 
 . ../../include/path.sh
 
 build=_build$ndk_suffix
 
+check_iconv_files () {
+	for file in "$prefix_dir/include/iconv.h" "$prefix_dir/lib/libiconv.a" "$prefix_dir/lib/libcharset.a"; do
+		if [ ! -f "$file" ]; then
+			echo "Missing libiconv file: $file" >&2
+			exit 1
+		fi
+	done
+}
+
+patch_mpv_iconv_dependency () {
+	local iconv_dep
+
+	# Meson's built-in iconv dependency does not consult iconv.pc, and find_library()
+	# has no extra search dirs here. Provide the just-built static libiconv directly.
+	iconv_dep="iconv = declare_dependency(compile_args: ['-I$prefix_dir/include'], link_args: ['$prefix_dir/lib/libiconv.a', '$prefix_dir/lib/libcharset.a'])"
+	${SED:-sed} -i.bak \
+		-e "/^iconv = dependency('iconv', required: get_option('iconv'))$/c\\$iconv_dep" \
+		-e "/^iconv = declare_dependency(compile_args: \['-I.*\/include'\], link_args: \['.*\/libiconv\.a', '.*\/libcharset\.a'\])$/c\\$iconv_dep" \
+		meson.build
+	rm -f meson.build.bak
+}
+
+motion_receipt="$prefix_dir/share/mpv-motion/provenance.properties"
 if [ "$1" == "build" ]; then
-	true
+	# A failed rebuild must not leave an older archive accepted as current.
+	rm -f "$motion_receipt"
 elif [ "$1" == "clean" ]; then
-	rm -rf $build
+	rm -rf "$build"
 	exit 0
 else
 	exit 255
 fi
 
-# Android provides Vulkan, but no pkgconfig file
-# you can double-check the version in vulkan_core.h (-> VK_HEADER_VERSION)
-mkdir -p "$prefix_dir"/lib/pkgconfig
-cat >"$prefix_dir"/lib/pkgconfig/vulkan.pc <<"END"
-Name: Vulkan
-Description:
-Version: 1.3.275
-Libs: -lvulkan
-Cflags:
-END
-
 unset CC CXX # meson wants these unset
 
-meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
-	--default-library shared \
-	-Diconv=disabled -D{lua,libcurl,vulkan}=enabled \
-	-Dlibmpv=true -Dcplayer=false \
-	-Dmanpage-build=disabled \
-	-Ddvdnav=enabled -Dlibbluray=enabled -Ddvda=enabled
+check_iconv_files
+patch_mpv_iconv_dependency
 
-ninja -C $build -j$cores
-if [ -f $build/libmpv.a ]; then
-	echo >&2 "Meson fucked up, forcing rebuild."
-	$0 clean
-	exec $0 build
+# Canonical installed header identity: relative names and contents, not mtimes.
+libplacebo_headers_sha() {
+	(
+		cd "$prefix_dir/include"
+		find libplacebo -type f -print0 \
+			| LC_ALL=C sort -z \
+			| xargs -0 sha256sum --binary | sed 's/ \*/  /'
+	) | sha256sum | cut -d ' ' -f 1
+}
+
+libplacebo_archive_sha=$(sha256sum "$prefix_dir/lib/libplacebo.a" | cut -d ' ' -f 1)
+libplacebo_header_sha=$(libplacebo_headers_sha)
+
+motion_core=video/out/gpu_next/motion.c
+motion_header=video/out/gpu_next/motion.h
+motion_commit=$(git rev-parse HEAD)
+motion_source_sha=$(sha256sum "$motion_core" | cut -d ' ' -f 1)
+motion_header_sha=$(sha256sum "$motion_header" | cut -d ' ' -f 1)
+git diff --quiet HEAD -- "$motion_core" "$motion_header" LICENSE.LGPL || {
+	echo "Motion SDK source differs from its commit." >&2
+	exit 1
+}
+
+meson setup "$build" --cross-file "$prefix_dir"/crossfile.txt \
+	--default-library shared \
+	-D{iconv,uchardet}=enabled \
+	-D{libarchive,dvdnav}=enabled \
+	-D{lua,libcurl,rubberband}=enabled \
+	-Dlibmpv=true -Dcplayer=false \
+	-Dlibbluray=enabled \
+	-Dvulkan=enabled \
+	-Dmanpage-build=disabled
+
+ninja -C "$build" -j"$cores"
+if [ ! -s "$build/libmpv.so" ]; then
+	echo "Meson did not produce the required shared libmpv: $build/libmpv.so" >&2
+	exit 1
 fi
-DESTDIR="$prefix_dir" ninja -C $build install
+DESTDIR="$prefix_dir" ninja -C "$build" install
+
+# Bind the installed archive to the source actually used by this build.
+[ "$motion_commit" = "$(git rev-parse HEAD)" ] &&
+[ "$motion_source_sha" = "$(sha256sum "$motion_core" | cut -d ' ' -f 1)" ] &&
+[ "$motion_header_sha" = "$(sha256sum "$motion_header" | cut -d ' ' -f 1)" ] &&
+git diff --quiet HEAD -- "$motion_core" "$motion_header" LICENSE.LGPL &&
+cmp -s "$motion_header" "$prefix_dir/include/mpv-motion/motion.h" || {
+	echo "Motion SDK source or installed header changed during build." >&2
+	exit 1
+}
+[ "$libplacebo_archive_sha" = "$(sha256sum "$prefix_dir/lib/libplacebo.a" | cut -d ' ' -f 1)" ] &&
+[ "$libplacebo_header_sha" = "$(libplacebo_headers_sha)" ] || {
+	echo "Motion SDK libplacebo inputs changed during build." >&2
+	exit 1
+}
+motion_archive_sha=$(sha256sum "$prefix_dir/lib/libmpv-motion.a" | cut -d ' ' -f 1)
+mkdir -p "$(dirname "$motion_receipt")"
+cat >"$motion_receipt.tmp" <<EOF
+schema.version=1
+mpv-motion.arch=$prefix_name
+mpv-motion.commit=$motion_commit
+mpv-motion.source.sha256=$motion_source_sha
+mpv-motion.header.sha256=$motion_header_sha
+mpv-motion.archive.sha256=$motion_archive_sha
+libplacebo.archive.sha256=$libplacebo_archive_sha
+libplacebo.headers.sha256=$libplacebo_header_sha
+EOF
+mv "$motion_receipt.tmp" "$motion_receipt"

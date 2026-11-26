@@ -34,12 +34,20 @@ if [[ -z "$prefix32" && -z "$prefix64" && -z "$prefix_x64" && -z "$prefix_x86" ]
 	exit 1
 fi
 
-chmod +x $BUILD/scripts/write_versions.sh
-$BUILD/scripts/write_versions.sh $ndk_suffix
-
 ### Native parts
 PREFIX32="$prefix32" PREFIX64="$prefix64" PREFIX_X64="$prefix_x64" PREFIX_X86="$prefix_x86" \
 ndk-build -C app/src/main -j$cores
+
+for abi in armeabi-v7a arm64-v8a x86_64 x86; do
+	if [ -d "app/src/main/libs/$abi" ]; then
+		python3 "$BUILD/include/ffmpeg-shared.py" verify-package "app/src/main/libs/$abi"
+	fi
+done
+
+if [ -n "$MPV_ANDROID_NATIVE_ONLY" ]; then
+	echo "Skipping Gradle APK build because MPV_ANDROID_NATIVE_ONLY is set."
+	exit 0
+fi
 
 ### Java parts
 # Android's gradle plugin needs both of these to correctly strip libraries.
