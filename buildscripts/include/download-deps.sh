@@ -98,12 +98,12 @@ fi
 
 # libdvdread (DVD ISO reading; needed by mpv -Ddvdnav/-Ddvda)
 if [ ! -d libdvdread ]; then
-	git clone --depth=1 -b "$v_libdvdread" https://github.com/mirror/libdvdread libdvdread
+	git clone --depth=1 -b "$v_libdvdread" https://code.videolan.org/videolan/libdvdread.git libdvdread
 fi
 
 # libdvdnav (DVD menus + DVD-Video ISO; needed by mpv -Ddvdnav)
 if [ ! -d libdvdnav ]; then
-	git clone --depth=1 -b "$v_libdvdnav" https://github.com/mirror/libdvdnav libdvdnav
+	git clone --depth=1 -b "$v_libdvdnav" https://code.videolan.org/videolan/libdvdnav.git libdvdnav
 fi
 
 # libbluray (Blu-ray ISO/menus; needed by mpv -Dlibbluray)
