@@ -128,7 +128,8 @@ jni_func(jobject, grabThumbnail, jint dimension) {
 // Kept for Java API compatibility. Fast thumbnail generation now uses the
 // same mpv screenshot path and ignores the extra arguments.
 jni_func(jobject, grabThumbnailFast, jstring jpath, jdouble position, jint dimension, jboolean use_hw_dec) {
-    return grabThumbnail(env, obj, dimension);
+    // Fast path is intentionally disabled in the dlsym/JVM-compatible build.
+    return NULL;
 }
 
 jni_func(void, setThumbnailJavaVM, jobject appctx) {
