@@ -24,11 +24,9 @@ jobs:
           sudo apt-get install -y autoconf automake pkgconf libtool ninja-build python3-pip gperf nasm
           sudo pip3 install meson --break-system-packages
 
-      - name: Pin mpv to v0.42.0 and apply AVC PTS patch
+      - name: Use FongMi/mpv kernel (mpv 0.42 + ISO over HTTP) and apply AVC PTS patch
         run: |
           set -e
-          sed -i 's#https://github.com/mpv-player/mpv/archive/master.tar.gz#https://github.com/mpv-player/mpv/archive/refs/tags/v0.42.0.tar.gz#' buildscripts/include/ci.sh
-          grep -n 'mpv-player/mpv/archive' buildscripts/include/ci.sh
           cat > /tmp/fix_avc.py <<'PY'
           path = 'buildscripts/deps/mpv/player/video.c'
           import os
@@ -38,6 +36,9 @@ jobs:
           if 'PATCH: hwdec H.264' in src:
               print('already patched'); raise SystemExit(0)
           old = "            frame_time = 0;\n"
+          if 'Invalid video timestamp' not in src or old not in src:
+              print('AVC patch anchor not found in FongMi source; skipping (non-fatal)')
+              raise SystemExit(0)
           w = src.index('Invalid video timestamp')
           pos = src.index(old, w)
           new = """                    /* PATCH: hwdec H.264 with B-frames emits non-monotonic
@@ -70,9 +71,14 @@ jobs:
           buildscripts/include/ci.sh install
           cd buildscripts
           ./download.sh
+          # Replace the official mpv tree with FongMi/mpv (same 0.42.0 base but
+          # adds stream_iso.c: ISO detection over http/https — exactly what
+          # NeoPlayer uses to play WebDAV ISO as a disc with titles/chapters).
+          rm -rf deps/mpv
+          git clone --depth=1 -b fongmi https://github.com/FongMi/mpv.git deps/mpv
           cd ..
           python3 /tmp/fix_avc.py
-          grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
+          grep -n 'stream_info_iso' buildscripts/deps/mpv/stream/stream_iso.c
           # verify ISO deps were downloaded
           ls -d buildscripts/deps/libdvdread buildscripts/deps/libdvdnav buildscripts/deps/libbluray
           cd buildscripts
