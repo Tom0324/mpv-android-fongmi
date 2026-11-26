@@ -99,8 +99,14 @@ jobs:
           if grep -a -q "force-iso" "$MPV_SO"; then echo "FOUND force-iso"; else echo "MISSING force-iso"; exit 1; fi
           if grep -a -q "libbluray" "$MPV_SO" || grep -a -q "bd_open_stream" "$MPV_SO" || grep -a -q "bluray" "$MPV_SO"; then echo "FOUND bluray support"; else echo "MISSING bluray support"; exit 1; fi
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
-          PLAYER_SO=$(find buildscripts app -name libplayer.so | head -1)
-          echo "libplayer: $PLAYER_SO"
+          AAR=app/build/outputs/aar/app-release.aar
+          test -f "$AAR"
+          rm -rf /tmp/xn-aar-check
+          mkdir -p /tmp/xn-aar-check
+          unzip -q "$AAR" -d /tmp/xn-aar-check
+          unzip -l "$AAR" | grep 'libplayer.so' || true
+          PLAYER_SO=$(find /tmp/xn-aar-check -name libplayer.so | head -1)
+          echo "libplayer in AAR: $PLAYER_SO"
           test -n "$PLAYER_SO"
           if grep -a -q "Java_is_xyz_mpv_MPVLib" "$PLAYER_SO"; then echo "FOUND MPVLib JNI"; else echo "MISSING MPVLib JNI"; exit 1; fi
           echo "ISO/AVC/JNI artifact checks passed"
