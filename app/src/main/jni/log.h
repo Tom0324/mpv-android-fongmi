@@ -1,23 +1,18 @@
 #pragma once
 
 #include <android/log.h>
+#include <jni.h>
 
 #define DEBUG 1
 
 #define LOG_TAG "mpv"
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-#define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
-#define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define ALOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #if DEBUG
 #define ALOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)
 #else
 #define ALOGV(...) (void)0
 #endif
 
-__attribute__((noreturn)) void die(const char *msg);
-
-#define CHECK_MPV_INIT() do { \
-	if (__builtin_expect(!g_mpv, 0)) \
-        die("libmpv is not initialized"); \
-	} while (0)
+void throw_java_exception(JNIEnv *env, const char *msg);
+bool check_mpv_initialized();
+bool require_mpv_initialized(JNIEnv *env);

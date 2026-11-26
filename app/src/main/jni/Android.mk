@@ -13,8 +13,6 @@ ifeq ($(TARGET_ARCH_ABI),x86)
 PREFIX = $(PREFIX_X86)
 endif
 
-# FongMi unified FFmpeg library. JavaVM registration is resolved from this
-# library via dlsym in main.cpp so FongMi libmpv can see it.
 include $(CLEAR_VARS)
 LOCAL_MODULE := libffmpeg
 LOCAL_SRC_FILES := $(PREFIX)/lib/libffmpeg.so
@@ -28,13 +26,13 @@ LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
-
 LOCAL_MODULE    := libplayer
 LOCAL_CFLAGS    := -Werror
 LOCAL_CPPFLAGS  += -std=c++11
 LOCAL_SRC_FILES := \
 	main.cpp \
 	render.cpp \
+	request.cpp \
 	log.cpp \
 	jni_utils.cpp \
 	property.cpp \
