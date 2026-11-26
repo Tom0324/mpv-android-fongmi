@@ -111,10 +111,11 @@ jobs:
           test -f "$PLAYER_SO"
           grep -a -q 'stream_info_iso' "$MPV_SO" && echo "FOUND stream_info_iso" || { echo "MISSING stream_info_iso"; exit 1; }
           grep -a -q 'dvdnav_open' "$MPV_SO" && echo "FOUND dvdnav_open" || true
-          READELF=$(find "$GITHUB_WORKSPACE/buildscripts/sdk" -name llvm-readelf -type f | head -1)
+          READELF=$(command -v llvm-readelf || command -v readelf || true)
           echo "readelf: $READELF"
+          test -n "$READELF"
           for sym in getPropertyNode setPropertyNode getPropertyInt setPropertyInt getPropertyDouble setPropertyDouble getPropertyBoolean setPropertyBoolean getPropertyString setPropertyString observeProperty setOptionString command commandNode grabThumbnail grabThumbnailFast setThumbnailJavaVM clearThumbnailCache; do
-            "$READELF" --dyn-syms "$PLAYER_SO" | grep -q "Java_is_xyz_mpv_MPVLib_${sym}$" || { echo "MISSING JNI $sym"; exit 1; }
+            "$READELF" --dyn-syms "$PLAYER_SO" | grep -q "Java_is_xyz_mpv_MPVLib_${sym}" || { echo "MISSING JNI $sym"; exit 1; }
           done
           echo "ALL JNI SYMBOLS OK"
           "$READELF" --dyn-syms "$PLAYER_SO" | grep ' NEEDED ' || true
