@@ -30,7 +30,8 @@ meson setup $build --cross-file "$prefix_dir"/crossfile.txt \
 	--default-library shared \
 	-Diconv=disabled -D{lua,libcurl,vulkan}=enabled \
 	-Dlibmpv=true -Dcplayer=false \
-	-Dmanpage-build=disabled
+	-Dmanpage-build=disabled \
+	-Ddvdnav=enabled -Dlibbluray=enabled -Ddvda=enabled
 
 ninja -C $build -j$cores
 if [ -f $build/libmpv.a ]; then

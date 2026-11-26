@@ -18,6 +18,10 @@ v_mbedtls=3.6.7
 v_libxml2=2.15.4
 v_fontconfig=2.18.3
 v_curl=8.21.0
+# DVD/Blu-ray/ISO playback (mpv 0.42 -Ddvdnav/-Dlibbluray/-Ddvda)
+v_libdvdread=6.1.3
+v_libdvdnav=6.1.1
+v_libbluray=1.3.4
 
 
 ## Dependency tree
@@ -36,7 +40,10 @@ dep_lua=()
 dep_shaderc=()
 dep_libplacebo=(shaderc)
 dep_curl=(mbedtls)
-dep_mpv=(ffmpeg libass lua libplacebo curl)
+dep_libdvdread=()
+dep_libdvdnav=(libdvdread)
+dep_libbluray=()
+dep_mpv=(ffmpeg libass lua libplacebo curl libdvdread libdvdnav libbluray)
 dep_mpv_android=(mpv)
 
 
