@@ -90,7 +90,7 @@ jobs:
                   raise SystemExit('FATAL: demux_disc params anchors != 2: %d' % src.count(old))
               src = src.replace(old, new)
               nav_old = '            demux_set_nav_active(demuxer, nav.nav_active);\n'
-              nav_new = '            /* PATCH: only block demuxer prefetch while a disc menu is visible */\n            demux_set_nav_active(demuxer, nav.nav_active && menu_active);\n'
+              nav_new = '            /* PATCH: always allow demuxer prefetch during title playback */\n            demux_set_nav_active(demuxer, false);\n'
               if src.count(nav_old) != 1:
                   raise SystemExit('FATAL: demux_disc nav anchor != 1: %d' % src.count(nav_old))
               src = src.replace(nav_old, nav_new)
@@ -98,7 +98,7 @@ jobs:
               print('patched', path)
           PY
           grep -n 'PATCH: disc slave demuxer cache' buildscripts/deps/mpv/demux/demux_disc.c
-          grep -n 'PATCH: only block demuxer prefetch' buildscripts/deps/mpv/demux/demux_disc.c
+          grep -n 'PATCH: always allow demuxer prefetch' buildscripts/deps/mpv/demux/demux_disc.c
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
           grep -n 'stream_info_iso' buildscripts/deps/mpv/stream/stream_iso.c
           grep -n 'force-iso' buildscripts/deps/mpv/options/options.c
@@ -122,7 +122,7 @@ jobs:
           if grep -a -q "libbluray" "$MPV_SO" || grep -a -q "bd_open_stream" "$MPV_SO" || grep -a -q "bluray" "$MPV_SO"; then echo "FOUND bluray support"; else echo "MISSING bluray support"; exit 1; fi
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
           grep -n 'PATCH: disc slave demuxer cache' buildscripts/deps/mpv/demux/demux_disc.c
-          grep -n 'PATCH: only block demuxer prefetch' buildscripts/deps/mpv/demux/demux_disc.c
+          grep -n 'PATCH: always allow demuxer prefetch' buildscripts/deps/mpv/demux/demux_disc.c
           grep -n 'Send MPVNode.None instead' app/src/main/jni/event.cpp
           AAR=app/build/outputs/aar/app-release.aar
           test -f "$AAR"
@@ -139,10 +139,10 @@ jobs:
       - name: Upload AAR to Release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: native-avcfix-mpv042-iso-cache-event-fix-20261127
+          TAG: native-avcfix-mpv042-iso-prefetch-fix-20261127
         run: |
           set -e
           test -f app/build/outputs/aar/app-release.aar
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + cache/event fixes" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + disc demuxer cache fix + non-null JNI event node + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
+            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + prefetch/event fixes" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
           gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
