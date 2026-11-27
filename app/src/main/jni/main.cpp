@@ -19,6 +19,7 @@ extern "C" {
 #include "jni_utils.h"
 #include "event.h"
 #include "request.h"
+#include "node.h"
 #include "globals.h"
 
 extern "C" {
