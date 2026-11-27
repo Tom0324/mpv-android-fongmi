@@ -103,6 +103,39 @@ jobs:
           grep -n 'stream_info_iso' buildscripts/deps/mpv/stream/stream_iso.c
           grep -n 'force-iso' buildscripts/deps/mpv/options/options.c
           grep -n 'stream_open_bluray_iso' buildscripts/deps/mpv/stream/stream_bluray.c
+          # Patch: on playlist transitions the previous MediaCodec output surface
+          # may still be connected to mpv's AImageReader when the next episode's
+          # decoder calls configure (nativeWindowConnect -22 / already connected).
+          # Retry configure briefly so the old codec can finish its async release.
+          python3 - <<'PY'
+          path = 'buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c'
+          src = open(path, encoding='utf-8').read()
+          marker = 'PATCH: mediacodec configure retry'
+          if marker in src:
+              print('mediacodec configure retry already applied')
+          else:
+              lines = src.split('\n')
+              needle = 'status = ff_AMediaCodec_configure(s->codec, format, s->surface, NULL, 0);'
+              idx = [i for i, ln in enumerate(lines) if needle in ln]
+              if len(idx) != 1:
+                  raise SystemExit('FATAL: mediacodec configure line count != 1: %d' % len(idx))
+              i = idx[0]
+              indent = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+              block = [
+                  indent + '/* PATCH: mediacodec configure retry */',
+                  lines[i],
+                  indent + 'for (int retry = 0; status < 0 && retry < 5; retry++) {',
+                  indent + '    /* Previous episode codec may still be releasing the',
+                  indent + '     * AImageReader surface during playlist transitions. */',
+                  indent + '    av_usleep(60000);',
+                  indent + '    ' + lines[i].strip(),
+                  indent + '}',
+              ]
+              lines[i:i+1] = block
+              open(path, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines))
+              print('patched', path)
+          PY
+          grep -n 'PATCH: mediacodec configure retry' buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c
           # Exact NextPlayerCloud recipe uses vanilla libdvdnav/libdvdread/libbluray tarballs.
           test -f buildscripts/deps/libdvdnav/src/dvdnav/dvdnav.h
           ls -d buildscripts/deps/libdvdread buildscripts/deps/libdvdnav buildscripts/deps/libbluray
@@ -139,10 +172,10 @@ jobs:
       - name: Upload AAR to Release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: native-avcfix-mpv042-iso-prefetch-fix-20261127
+          TAG: native-avcfix-mpv042-iso-mcconfigure-retry-20261128
         run: |
           set -e
           test -f app/build/outputs/aar/app-release.aar
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + prefetch/event fixes" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
+            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ configure retry" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
           gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
