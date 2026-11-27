@@ -55,7 +55,12 @@ static void sendPropertyUpdateToJava(JNIEnv *env, mpv_event_property *prop)
 
 static void sendEventToJava(JNIEnv *env, int event)
 {
-    jobject jnode = mpv_node_to_jobject(env, NULL);
+    // MPVLib.event() takes a non-null MPVNode. Passing NULL here made Kotlin's
+    // null check throw for every core event (file-loaded, playback-restart...),
+    // so App-side state restoration never ran. Send MPVNode.None instead.
+    mpv_node node = {0};
+    node.format = MPV_FORMAT_NONE;
+    jobject jnode = mpv_node_to_jobject(env, &node);
     env->CallStaticVoidMethod(mpv_MPVLib, mpv_MPVLib_event, (jint)event, jnode);
     if (jnode) env->DeleteLocalRef(jnode);
 }
