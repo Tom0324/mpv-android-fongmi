@@ -84,26 +84,11 @@ jobs:
           if marker in src:
               print('disc cache patch already applied')
           else:
-              old_initial = """    struct demuxer_params params = {
-        .force_format = "+lavf",
-        .external_stream = demuxer->stream,
-        .stream_flags = demuxer->stream_origin,
-        .depth = demuxer->depth + 1,
-    };
-"""
-              new_initial = """    /* PATCH: disc slave demuxer cache */
-    struct demuxer_params params = {
-        .force_format = "+lavf",
-        .external_stream = demuxer->stream,
-        .stream_flags = demuxer->stream_origin,
-        .depth = demuxer->depth + 1,
-        .is_top_level = true,
-        .disable_timeline = true,
-    };
-"""
-              if src.count(old_initial) != 2:
-                  raise SystemExit('FATAL: demux_disc params anchors != 2: %d' % src.count(old_initial))
-              src = src.replace(old_initial, new_initial)
+              old = '    struct demuxer_params params = {\n        .force_format = "+lavf",\n        .external_stream = demuxer->stream,\n        .stream_flags = demuxer->stream_origin,\n        .depth = demuxer->depth + 1,\n    };\n'
+              new = '    /* PATCH: disc slave demuxer cache */\n    struct demuxer_params params = {\n        .force_format = "+lavf",\n        .external_stream = demuxer->stream,\n        .stream_flags = demuxer->stream_origin,\n        .depth = demuxer->depth + 1,\n        .is_top_level = true,\n        .disable_timeline = true,\n    };\n'
+              if src.count(old) != 2:
+                  raise SystemExit('FATAL: demux_disc params anchors != 2: %d' % src.count(old))
+              src = src.replace(old, new)
               open(path, 'w', encoding='utf-8', newline='\n').write(src)
               print('patched', path)
           PY
