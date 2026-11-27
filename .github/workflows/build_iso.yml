@@ -77,6 +77,37 @@ jobs:
           buildscripts/include/ci.sh install
           test "$(git -C buildscripts/deps/mpv rev-parse HEAD)" = "76f963cc4002125776f741738b6c1d8cc08daf18"
           python3 /tmp/fix_avc.py
+          python3 - <<'PY'
+          path = 'buildscripts/deps/mpv/demux/demux_disc.c'
+          src = open(path, encoding='utf-8').read()
+          marker = 'PATCH: disc slave demuxer cache'
+          if marker in src:
+              print('disc cache patch already applied')
+          else:
+              old_initial = """    struct demuxer_params params = {
+        .force_format = "+lavf",
+        .external_stream = demuxer->stream,
+        .stream_flags = demuxer->stream_origin,
+        .depth = demuxer->depth + 1,
+    };
+"""
+              new_initial = """    /* PATCH: disc slave demuxer cache */
+    struct demuxer_params params = {
+        .force_format = "+lavf",
+        .external_stream = demuxer->stream,
+        .stream_flags = demuxer->stream_origin,
+        .depth = demuxer->depth + 1,
+        .is_top_level = true,
+        .disable_timeline = true,
+    };
+"""
+              if src.count(old_initial) != 2:
+                  raise SystemExit('FATAL: demux_disc params anchors != 2: %d' % src.count(old_initial))
+              src = src.replace(old_initial, new_initial)
+              open(path, 'w', encoding='utf-8', newline='\n').write(src)
+              print('patched', path)
+          PY
+          grep -n 'PATCH: disc slave demuxer cache' buildscripts/deps/mpv/demux/demux_disc.c
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
           grep -n 'stream_info_iso' buildscripts/deps/mpv/stream/stream_iso.c
           grep -n 'force-iso' buildscripts/deps/mpv/options/options.c
@@ -99,6 +130,7 @@ jobs:
           if grep -a -q "force-iso" "$MPV_SO"; then echo "FOUND force-iso"; else echo "MISSING force-iso"; exit 1; fi
           if grep -a -q "libbluray" "$MPV_SO" || grep -a -q "bd_open_stream" "$MPV_SO" || grep -a -q "bluray" "$MPV_SO"; then echo "FOUND bluray support"; else echo "MISSING bluray support"; exit 1; fi
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
+          grep -n 'PATCH: disc slave demuxer cache' buildscripts/deps/mpv/demux/demux_disc.c
           AAR=app/build/outputs/aar/app-release.aar
           test -f "$AAR"
           rm -rf /tmp/xn-aar-check
@@ -114,10 +146,10 @@ jobs:
       - name: Upload AAR to Release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: native-avcfix-mpv042-iso-neoplayer-ffmpeg8.1-fongmi-20261126
+          TAG: native-avcfix-mpv042-iso-cache-fix-20261127
         run: |
           set -e
           test -f app/build/outputs/aar/app-release.aar
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + DVD/Blu-ray/ISO (dvdnav/libbluray/libdvdread), FFmpeg release-8.1-fongmi, libplacebo fongmi"
+            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + disc cache fix" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + disc slave demuxer cache fix + DVD/Blu-ray/ISO (dvdnav/libbluray/libdvdread), FFmpeg release-8.1-fongmi, libplacebo fongmi"
           gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
