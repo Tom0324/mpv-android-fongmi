@@ -24,10 +24,6 @@ static inline mpv_node make_node_str(const char *s)
     return r;
 }
 
-static bool check_mpv_initialized() {
-    return g_mpv != NULL;
-}
-
 jni_func(jobject, grabThumbnail, jint dimension) {
     if (!check_mpv_initialized())
         return NULL;
