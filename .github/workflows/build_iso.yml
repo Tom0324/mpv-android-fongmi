@@ -241,6 +241,23 @@ jobs:
               print('patched', path)
           PY
           grep -n 'PATCH: aimagereader uninit release order' buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c
+          # PATCH: EOF frame reset (adapted from mpv-player/mpv PR #14631).
+          # On file transition, release VO frame references so the existing
+          # FFmpeg MediaCodec.stop() fix can run instead of leaving the old
+          # codec connected to the AImageReader surface. Additive-only patch.
+          python3 .github/scripts/frame_reset_patch.py buildscripts/deps/mpv
+          grep -n 'PATCH: vo_eof_reset A' buildscripts/deps/mpv/player/loadfile.c
+          grep -n 'PATCH: vo_eof_reset E' buildscripts/deps/mpv/video/out/vo.c
+          grep -n 'PATCH: vo_eof_reset F' buildscripts/deps/mpv/video/out/vo.h
+          grep -n 'PATCH: vo_eof_reset H' buildscripts/deps/mpv/video/out/vo_gpu.c
+          grep -n 'PATCH: vo_eof_reset I' buildscripts/deps/mpv/video/out/gpu/video.c
+          grep -n 'PATCH: vo_eof_reset J' buildscripts/deps/mpv/video/out/gpu/video.h
+          grep -n 'PATCH: vo_eof_reset K' buildscripts/deps/mpv/video/out/vo_gpu_next.c
+          grep -n 'PATCH: vo_eof_reset L' buildscripts/deps/mpv/video/out/vo_libmpv.c
+          for feat in HAVE_VULKAN supports_gpu_dovi_mapping AImage_getDataSpace IMAGE_TIMESTAMP_TOLERANCE_NS retain_previous_frame AImageReader_acquireLatestImageAsync AImage_deleteAsync AImageReader_newWithUsage 'AImageReader stats'; do
+            grep -q "$feat" buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c || { echo "MISSING NeoPlayer feature: $feat"; exit 1; }
+          done
+          echo 'NeoPlayer feature anchors preserved'
           # Exact NextPlayerCloud recipe uses vanilla libdvdnav/libdvdread/libbluray tarballs.
           test -f buildscripts/deps/libdvdnav/src/dvdnav/dvdnav.h
           ls -d buildscripts/deps/libdvdread buildscripts/deps/libdvdnav buildscripts/deps/libbluray
@@ -262,6 +279,10 @@ jobs:
           grep -n 'PATCH: disc slave demuxer cache' buildscripts/deps/mpv/demux/demux_disc.c
           grep -n 'PATCH: always allow demuxer prefetch' buildscripts/deps/mpv/demux/demux_disc.c
           grep -n 'PATCH: aimagereader uninit release order' buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c
+          grep -n 'PATCH: vo_eof_reset A' buildscripts/deps/mpv/player/loadfile.c
+          grep -n 'PATCH: vo_eof_reset E' buildscripts/deps/mpv/video/out/vo.c
+          grep -n 'PATCH: vo_eof_reset F' buildscripts/deps/mpv/video/out/vo.h
+          grep -n 'PATCH: vo_eof_reset K' buildscripts/deps/mpv/video/out/vo_gpu_next.c
           grep -n 'Send MPVNode.None instead' app/src/main/jni/event.cpp
           AAR=app/build/outputs/aar/app-release.aar
           test -f "$AAR"
@@ -278,10 +299,10 @@ jobs:
       - name: Upload AAR to Release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: native-avcfix-mpv042-iso-uninit-release-order-20261129
+          TAG: native-avcfix-mpv042-iso-eof-frame-reset-20261129
         run: |
           set -e
           test -f app/build/outputs/aar/app-release.aar
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ uninit release order" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + hwdec_aimagereader.c uninit() release order fix (Surface.release / DeleteGlobalRef / AImageReader_delete before hwdec_devices_remove / av_buffer_unref) preserving all NeoPlayer features (Vulkan, DV mapping, HDR colorspace, stale-frame check, retained frames, async images, max_images=5, stats) + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
+            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ EOF frame reset" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + hwdec_aimagereader.c uninit() release order fix + EOF frame reset adapted from mpv PR #14631 (vo_eof_reset / VOCTRL_FRAME_RESET / gl_video_reset_frame / vo_gpu_next reset_frame_queue) so old frame references are released on file transition, preserving all NeoPlayer features (Vulkan, DV mapping, HDR colorspace, stale-frame check, retained frames, async images, max_images=5, stats) + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
           gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
