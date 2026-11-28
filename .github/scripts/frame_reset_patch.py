@@ -27,8 +27,8 @@ patch(
     'player/loadfile.c',
     'PATCH: vo_eof_reset A',
     '''    reinit_complex_filters(mpctx, true);\n    uninit_audio_chain(mpctx);\n    uninit_video_chain(mpctx);\n    uninit_sub_all(mpctx);\n''',
-    '''    reinit_complex_filters(mpctx, true);\n    uninit_audio_chain(mpctx);\n    uninit_video_chain(mpctx);\n    /* PATCH: vo_eof_reset A - release VO frame refs before next file */\n    if (mpctx->vo_chain)\n        vo_eof_reset(mpctx->vo_chain->vo);\n    uninit_sub_all(mpctx);\n''',
-    ('uninit_video_chain(mpctx);', 'uninit_sub_all(mpctx);'),
+    '''    reinit_complex_filters(mpctx, true);\n    uninit_audio_chain(mpctx);\n    /* PATCH: vo_eof_reset A - uninit_video_chain() sets vo_chain to NULL,\n     * so save the VO and release its frame refs before the decoder goes away. */\n    struct vo *eof_reset_vo = mpctx->vo_chain ? mpctx->vo_chain->vo : NULL;\n    if (eof_reset_vo) {\n        MP_VERBOSE(mpctx, "PATCH: vo_eof_reset A: releasing VO frames\\n");\n        vo_eof_reset(eof_reset_vo);\n    }\n    uninit_video_chain(mpctx);\n    uninit_sub_all(mpctx);\n''',
+    ('uninit_video_chain(mpctx);', 'uninit_sub_all(mpctx);', 'PATCH: vo_eof_reset A'),
 )
 
 patch(

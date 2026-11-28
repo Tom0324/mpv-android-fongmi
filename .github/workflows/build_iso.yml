@@ -299,10 +299,10 @@ jobs:
       - name: Upload AAR to Release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: native-avcfix-mpv042-iso-eof-frame-reset-20261129
+          TAG: native-avcfix-mpv042-iso-eof-frame-reset-fix-20261129
         run: |
           set -e
           test -f app/build/outputs/aar/app-release.aar
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ EOF frame reset" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + hwdec_aimagereader.c uninit() release order fix + EOF frame reset adapted from mpv PR #14631 (vo_eof_reset / VOCTRL_FRAME_RESET / gl_video_reset_frame / vo_gpu_next reset_frame_queue) so old frame references are released on file transition, preserving all NeoPlayer features (Vulkan, DV mapping, HDR colorspace, stale-frame check, retained frames, async images, max_images=5, stats) + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
+            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ EOF frame reset fix" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + hwdec_aimagereader.c uninit() release order fix + EOF frame reset adapted from mpv PR #14631 with corrected call order (vo_eof_reset now runs before uninit_video_chain clears vo_chain) so old frame references are actually released on file transition, preserving all NeoPlayer features (Vulkan, DV mapping, HDR colorspace, stale-frame check, retained frames, async images, max_images=5, stats) + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
           gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
