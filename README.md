@@ -1,176 +1,121 @@
 # mpv-android-fongmi
 
-XNPlayer 的 native 内核工厂。
+[License](LICENSE) · [AAR Releases](https://github.com/Tom0324/mpv-android-fongmi/releases) · [XNPlayer](https://github.com/Tom0324/XNPlayer)
 
-这个仓库不负责做 App 界面，也不直接产出最终 APK。它只做一件事：把经过 AVC PTS 修复的 mpv 内核，编译成 XNPlayer 可以直接使用的 Android AAR。
-
-XNPlayer 主仓库在 [Tom0324/XNPlayer](https://github.com/Tom0324/XNPlayer)。
+> XNPlayer 的 native 内核工厂。本仓库不生产 APK，也不负责 App UI；它只负责把可复现的 mpv / FFmpeg / libplacebo 构建链、AVC PTS 修复、ISO 支持和 HW+ 连播修复打包成 XNPlayer 可直接使用的 `arm64-v8a` AAR。
 
 ---
 
-## 30 秒速览
+## 项目定位
 
-| 项目 | 当前基线 |
+| 项目 | 当前值 |
 |---|---|
 | 产物 | `mpv-android-avcfix.aar` |
-| 使用方 | XNPlayer |
-| 使用路径 | `app/libs/mpv-android-avcfix.aar` |
+| 唯一消费方 | [Tom0324/XNPlayer](https://github.com/Tom0324/XNPlayer)（私有仓库） |
+| 当前主线分支 | `iso-cache-fix-20261127` |
+| 当前 AAR Release | [`native-avcfix-mpv042-iso-eof-frame-reset-sync-20261129`](https://github.com/Tom0324/mpv-android-fongmi/releases/tag/native-avcfix-mpv042-iso-eof-frame-reset-sync-20261129) |
+| AAR SHA256 | `97174e10559b00cae26480947a5a9b2d5130dc33ad53a5f44e5d263f7c79e51e` |
 | ABI | 仅 `arm64-v8a` |
-| mpv | `v0.42.0` |
-| FFmpeg | `n9.1` (`74e4393595cf2b5857f0da925c4e0dd74ea306e5`) |
-| libplacebo | `v7.387.0` |
-| AVC HW+ | 已应用 PTS patch |
+| AVC HW+ | 保留默认 `mediacodec`，并应用 AVC PTS / configure retry / EOF frame reset 修复 |
 | OpenList | 不参与本仓库，不打包进 AAR |
 
 一句话：
 
 ```text
-App 仓库负责“把播放器组装起来”，本仓库负责“提供可靠的播放内核”。
+XNPlayer 负责把播放器组装起来；本仓库负责提供可复现、可验证的 native 播放内核。
 ```
 
 ---
 
-## 为什么需要这个仓库
-
-XNPlayer 的 AVC 硬解同步修复不在 Java/Kotlin 层，而是在 mpv native 层完成。  
-因此必须单独维护一套 native 构建链，确保每次重建 AAR 时：
-
-```text
-mpv 版本不漂移
-FFmpeg 版本不漂移
-libplacebo 版本不漂移
-AVC PTS patch 不丢失
-mpvEx JNI 接口保持一致
-只产出 XNPlayer 需要的 arm64-v8a
-```
-
-如果没有这个仓库，App 项目里只有一个 AAR 文件，失去可复现来源。  
-一旦 AAR 需要升级或排查 native 崩溃，就无法从头构建。
-
----
-
-## 仓库之间的关系
+## 构建链关系
 
 ```mermaid
 flowchart LR
-  A[mpv-android-fongmi] -->|产出 mpv-android-avcfix.aar| B[XNPlayer]
-  B -->|下载 AAR 到 app/libs| C[App 构建]
-  C -->|arm64-v8a APK| D[XNPlayer Release]
+  A[mpv-android-fongmi<br/>native 内核工厂] -->|产出 app-release.aar| B[AAR Release asset]
+  B -->|XNPlayer workflow 下载并校验 SHA256| C[XNPlayer<br/>app/libs/mpv-android-avcfix.aar]
+  C -->|Gradle assembleStandardPreview| D[unsigned APK]
+  D -->|CN=Trim 签名| E[XNPlayer Release]
 ```
 
 职责边界：
 
-```text
-本仓库：
-  native 依赖 pin
-  AVC patch
-  JNI 兼容
-  AAR 构建
-  AAR Release
-
-XNPlayer：
-  UI
-  汉化
-  设置页
-  WebDAV
-  APK 构建
-  最终 Release
-```
+| 仓库 | 负责 | 不负责 |
+|---|---|---|
+| [mpv-android-fongmi](https://github.com/Tom0324/mpv-android-fongmi) | native 依赖 pin、AVC/ISO/HW+ patch、AAR 构建与发布 | App UI、汉化、最终 APK |
+| [XNPlayer](https://github.com/Tom0324/XNPlayer) | App UI、设置页、WebDAV、APK 组装与签名发布 | 重建 mpv / FFmpeg native 内核 |
 
 ---
 
-## 当前 AAR Release
+## 当前 AAR 能力
 
-Release tag：
+当前 Release `native-avcfix-mpv042-iso-eof-frame-reset-sync-20261129` 的 Release Notes 明确包含：
 
-```text
-native-avcfix-mpv042-ffmpeg9.1-lp7.387.0
-```
+- AVC PTS patch。
+- `stream_iso/fongmi`、DVD / Blu-ray / ISO 支持。
+- disc demuxer 始终允许预读，修复 ISO 播放缓存过小。
+- JNI event 使用非空 `MPVNode`，避免 Java 回调 NPE。
+- FFmpeg MediaCodec configure retry：`20 × 100ms`。
+- FFmpeg close 诊断：记录 `hw_buffer_count` 与 stop 决策。
+- `hwdec_aimagereader.c` uninit 释放顺序修复，保留 NeoPlayer 特性。
+- 同步 EOF frame reset：VO frame 引用在解码器 teardown 前释放，参考 mpv PR [#14631](https://github.com/mpv-player/mpv/pull/14631)。
+- 保留 NeoPlayer 特性：Vulkan、Dolby Vision GPU mapping、HDR 色彩空间、stale-frame 检查、retained frame、异步 image API、`max_images=5`、AImageReader stats。
 
-Release asset：
-
-```text
-app-release.aar
-```
-
-XNPlayer 中的使用位置：
-
-```text
-app/libs/mpv-android-avcfix.aar
-```
-
-当前 AAR 已验证包含：
-
-```text
-mpv v0.42.0
-FFmpeg n9.1
-libplacebo v7.387.0
-AVC PTS patch
-mpvEx JNI event(int, MPVNode)
-仅 arm64-v8a native libraries
-```
+> Release tag 中的 `mpv042` 是历史构建命名，不应作为二进制版本字符串的唯一依据。判断当前基线请以 Release Notes、workflow pin 和 AAR 内实际字符串为准。
 
 ---
 
-## 版本基线
+## 构建入口
 
-### mpv
-
-```text
-v0.42.0
-```
-
-选择原因：
+主 workflow：
 
 ```text
-官方 latest release
-与当前 mpvEx JNI 接口匹配
-AVC PTS patch 已在此基线上验证
+.github/workflows/build_iso.yml
 ```
 
-### FFmpeg
+GitHub Actions 页面名称：
 
 ```text
-n9.1
-commit: 74e4393595cf2b5857f0da925c4e0dd74ea306e5
+Build ISO-enabled mpv AAR (DVD/Blu-ray)
 ```
 
-选择原因：
+主要步骤：
 
-```text
-官方稳定 tag
-不是 dev 分支
-不是 rc
-```
+1. Checkout 本仓库。
+2. 准备 JDK 17、autotools、meson、nasm 等构建环境。
+3. 从固定来源获取 mpv / FFmpeg / libplacebo 及 DVD/Blu-ray 依赖。
+4. 校验 mpv kernel commit 为 `76f963cc4002125776f741738b6c1d8cc08daf18`。
+5. 应用 AVC PTS patch，并确认补丁锚点存在。
+6. 应用 ISO demuxer、MediaCodec configure retry、close probe、AImageReader uninit、EOF frame reset 等补丁。
+7. 校验 NeoPlayer 特性锚点没有丢失。
+8. 仅构建 `arm64-v8a`。
+9. 校验 `libmpv.so` 中的 ISO / DVD / JNI 标记。
+10. 上传 `app-release.aar` 到本仓库 Release asset。
 
-### libplacebo
+当前发布方式使用 **Release asset**，不是 Actions artifact。Release asset 更适合长期保存；Actions artifact 有过期时间。
 
-```text
-v7.387.0
-```
+---
 
-选择原因：
+## 依赖与来源核实
 
-```text
-官方 latest release
-官方 tag 存在
-```
+下表只列出本仓库 README 涉及的项目，并标注真实用途。
 
-历史说明：
-
-```text
-v7.399.0 曾作为构建串出现，但不是官方稳定 tag/release。
-当前主线不再使用 v7.399.0 作为稳定版目标。
-```
-
-### AVC patch
-
-AVC PTS patch 由 workflow 自动应用。  
-关键原则：
-
-```text
-只要重建 AAR，就必须确认 patch 仍然成功应用。
-```
+| 项目 | 链接 | 用途 | 当前状态 |
+|---|---|---|---|
+| mpv-android-fongmi | [Tom0324/mpv-android-fongmi](https://github.com/Tom0324/mpv-android-fongmi) | native AAR 构建与发布 | 本仓库 |
+| XNPlayer | [Tom0324/XNPlayer](https://github.com/Tom0324/XNPlayer) | AAR 消费方 | 当前为私有仓库 |
+| mpvEx | [marlboro-advance/mpvEx](https://github.com/marlboro-advance/mpvEx) | App UI / JNI 接口参考 | 上游参考 |
+| mpvKt | [abdallahmehiz/mpvKt](https://github.com/abdallahmehiz/mpvKt) | Compose / mpv Android 上游参考 | 历史参考 |
+| mpv | [mpv-player/mpv](https://github.com/mpv-player/mpv) | 播放器引擎上游 | 上游参考；EOF reset 参考 PR #14631 |
+| mpv-android | [mpv-android/mpv-android](https://github.com/mpv-android/mpv-android) | Android JNI / AAR 工程参考 | 工程参考 |
+| FongMi/mpv | [FongMi/mpv](https://github.com/FongMi/mpv) | 当前内核基线 | 使用，固定 commit `76f963cc4` |
+| NextPlayerCloud/mpv | [NextPlayerCloud/mpv](https://github.com/NextPlayerCloud/mpv) | workflow 中 `NeoPlayer` ref 来源 | 使用，由 workflow env 指定 |
+| FFmpeg | [FFmpeg/FFmpeg](https://github.com/FFmpeg/FFmpeg) | 音视频解码上游 | 上游参考 |
+| FongMi/FFmpeg | [FongMi/FFmpeg](https://github.com/FongMi/FFmpeg) | `release-8.1-fongmi` 派生来源 | 使用 |
+| NextPlayerCloud/FFmpeg | [NextPlayerCloud/FFmpeg](https://github.com/NextPlayerCloud/FFmpeg) | workflow 中 FFmpeg 镜像来源 | 使用 |
+| libplacebo | [haasn/libplacebo](https://github.com/haasn/libplacebo) | 高质量渲染上游 | 上游参考 |
+| FongMi/libplacebo | [FongMi/libplacebo](https://github.com/FongMi/libplacebo) | native 构建默认 libplacebo 来源 | 使用 |
+| dav1d | [videolan/dav1d](https://github.com/videolan/dav1d) | AV1 解码依赖 | 构建依赖 |
+| libass | [libass/libass](https://github.com/libass/libass) | 字幕渲染依赖 | 构建依赖 |
 
 ---
 
@@ -182,7 +127,7 @@ AVC PTS patch 由 workflow 自动应用。
 arm64-v8a
 ```
 
-不支持：
+不构建：
 
 ```text
 armeabi-v7a
@@ -193,147 +138,92 @@ universal
 
 原因：
 
-```text
-XNPlayer 当前只构建 arm64-v8a。
-AVC patch 与 JNI 也只在 arm64-v8a 上完成验证。
-```
-
-如果你需要 v7a 或 x86 支持，需要额外完成：
-
-```text
-1. 增加对应 ABI 的 native 构建步骤
-2. 验证每个 ABI 的 JNI 接口
-3. 调整 AAR 打包逻辑
-4. 调整 XNPlayer Gradle 配置
-5. 重新构建并验证 APK
-```
-
-在当前主线中，不要承诺 v7a 或 x86 支持。
-
-详细 ABI 说明见：
-
-```text
-docs/AAR_COMPATIBILITY.md
-```
+- XNPlayer 当前只构建 `arm64-v8a`。
+- AVC patch、JNI 接口和 HW+ 修复只在 `arm64-v8a` 上完成验证。
+- 本仓库目标是稳定服务 XNPlayer，不是提供通用 mpv-android SDK。
 
 ---
 
-## 构建入口
+## XNPlayer 如何消费 AAR
 
-主 workflow：
+XNPlayer 的 workflow 当前会执行：
 
-```text
-.github/workflows/build_avcfix.yml
+```bash
+curl -fL --retry 3 -o app/libs/mpv-android-avcfix.aar \
+  https://github.com/Tom0324/mpv-android-fongmi/releases/download/native-avcfix-mpv042-iso-eof-frame-reset-sync-20261129/app-release.aar
+echo "97174e10559b00cae26480947a5a9b2d5130dc33ad53a5f44e5d263f7c79e51e  app/libs/mpv-android-avcfix.aar" | sha256sum -c -
 ```
 
-GitHub Actions 页面显示名称：
+也就是说，当前跨仓构建依赖的是：
 
-```text
-Build AVC-fixed mpv AAR (mpvEx JNI)
-```
+- 本仓库保持可匿名读取 Release asset；
+- AAR SHA256 固定为 `97174e...`；
+- XNPlayer 端不依赖本地旧 AAR 文件。
 
-它会：
+---
 
-```text
-1. 固定 mpv v0.42.0
-2. 应用 AVC PTS patch
-3. 固定 FFmpeg n9.1
-4. 固定 libplacebo v7.387.0
-5. 编译 arm64 native 组件
-6. 将 app-release.aar 上传到 GitHub Release asset
-```
+## 私有化影响
 
-当前输出方式使用 Release asset，而不是 Actions artifact。  
-原因是 Actions artifact 存储空间容易耗尽，Release asset 更适合长期保留构建产物。
+本仓库如果改成 private：
+
+- **本仓库自己的 AAR 构建不受影响**：workflow 拉取的是公开上游仓库，上传 Release asset 使用本仓库的 `GITHUB_TOKEN`。
+- **XNPlayer 当前 workflow 会失败**：它使用无鉴权 `curl` 下载本仓库 Release asset；私有化后匿名请求无法访问，下载会失败。
+- **XNPlayer Release 页面不受直接影响**：已经发布的 APK 资产在 XNPlayer 自己的私有仓库内。
+
+若要把本仓库私有化，必须先二选一：
+
+1. **保持本仓库公开**（最简单，现有 workflow 不用改）。
+2. **私有化本仓库，并改造 XNPlayer workflow**：
+   - 把当前 AAR 提交进 XNPlayer 仓库并改为本地校验；或
+   - 为 XNPlayer workflow 配置有读权限的 GitHub token，并改用带鉴权的下载方式。
+
+不要使用第三方 GitHub 加速站访问私有 Release asset，也不要把 token 交给第三方服务。
 
 ---
 
 ## 重建前检查清单
 
-每次触发构建前，建议先确认：
+每次触发构建前确认：
 
-```text
-mpv pin 是否仍为 v0.42.0
-FFmpeg pin 是否仍为 n9.1
-libplacebo pin 是否仍为 v7.387.0
-AVC patch 步骤是否仍存在
-workflow 是否仍只构建 arm64
-输出是否为 Release asset app-release.aar
-```
+- workflow 仍为 `.github/workflows/build_iso.yml`。
+- mpv kernel commit 仍为 `76f963cc4002125776f741738b6c1d8cc08daf18`。
+- AVC PTS patch 锚点仍存在。
+- MediaCodec configure retry 为 `20 × 100ms`。
+- `frame_reset_patch.py` 与 `mediacodec_close_probe.py` 仍存在。
+- NeoPlayer 特性锚点校验仍存在。
+- ABI 仍只包含 `arm64-v8a`。
+- 输出仍为 Release asset `app-release.aar`。
 
 构建完成后确认：
 
-```text
-AAR 中只有 jni/arm64-v8a/*
-libmpv.so 中存在 mpv v0.42.0
-存在 AVC patch 构建步骤日志
-MPVLib / MPVNode JNI 类存在
-event(int, MPVNode) 签名存在
-```
+- AAR 中只有 `jni/arm64-v8a/*`。
+- `libmpv.so` 包含 ISO / DVD / bluray 标记。
+- `force-iso` 与 `stream_iso` 标记存在。
+- MPVLib / MPVNode JNI 标记存在。
+- `PATCH: hwdec H.264`、`PATCH: vo_eof_reset A`、`PATCH: mediacodec close probe` 等日志存在。
+- SHA256 与 XNPlayer workflow 中的固定值一致。
 
 ---
 
 ## 不要删除
 
-以下内容是 XNPlayer 构建链的一部分：
+以下内容是 XNPlayer native 构建链的一部分：
 
 ```text
 本仓库
-Release tag: native-avcfix-mpv042-ffmpeg9.1-lp7.387.0
-Release asset: app-release.aar
-.github/workflows/build_avcfix.yml
+当前 AAR Release asset: app-release.aar
+.github/workflows/build_iso.yml
+.github/scripts/frame_reset_patch.py
+.github/scripts/mediacodec_close_probe.py
 AVC PTS patch 步骤
-native 版本 pin
+mpv / FFmpeg / libplacebo pin
+NeoPlayer 特性锚点校验
 ```
 
-删除任何一项都会导致：
-
-```text
-AVC AAR 无法复现
-XNPlayer 后续无法升级 native 内核
-AVC HW+ 修复来源丢失
-```
+删除任何一项都会导致 AAR 不可复现，或导致 XNPlayer 后续无法升级 native 内核。
 
 ---
 
-## 常见问题
+## License
 
-### 为什么不直接把 native 源码放到 XNPlayer？
-
-因为 native 构建链和 App 构建链关注点不同。  
-把 native 构建单独放在本仓库，可以避免 App 仓库被大量脚本、依赖和编译缓存污染。
-
-### 为什么不用 Beta3 的现成 so？
-
-Beta3 是成品 APK，不是可复现的 native 构建链。  
-它无法保证：
-
-```text
-FFmpeg 版本可追踪
-libplacebo 版本可追踪
-AVC patch 可复现
-JNI 与 mpvEx 完全一致
-```
-
-### 为什么只看 arm64-v8a？
-
-因为 XNPlayer 当前只构建 arm64-v8a。  
-本仓库的目标是稳定支持 XNPlayer，而不是提供通用 mpv-android SDK。
-
-### 这个仓库会打包 OpenList 吗？
-
-不会。
-
-```text
-OpenList 使用独立 OpenList-Mobile APK。
-播放器通过 WebDAV 连接。
-本仓库不产出 OpenList 相关 native 组件。
-```
-
----
-
-## 一句话总结
-
-```text
-这里是 XNPlayer 的 native 发动机车间：固定版本、应用 AVC 修复、产出 arm64-v8a AAR。
-```
+本仓库使用 [MIT License](LICENSE)。第三方依赖与上游项目（mpv、FFmpeg、libplacebo 等）的许可条款以其各自仓库为准。
