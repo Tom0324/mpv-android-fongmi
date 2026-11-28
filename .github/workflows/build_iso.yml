@@ -136,6 +136,111 @@ jobs:
               print('patched', path)
           PY
           grep -n 'PATCH: mediacodec configure retry' buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c
+          # PATCH: 15-line uninit() release order fix. Only reorder release
+          # calls in hwdec_aimagereader.c; keep every NeoPlayer feature intact.
+          python3 - <<'PY'
+          from collections import Counter
+          path = 'buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c'
+          src = open(path, encoding='utf-8').read()
+          marker = 'PATCH: aimagereader uninit release order'
+          marker_line = '    /* ' + marker + ' */'
+          feature_anchors = [
+              'HAVE_VULKAN',
+              'supports_gpu_dovi_mapping',
+              'AImage_getDataSpace',
+              'IMAGE_TIMESTAMP_TOLERANCE_NS',
+              'retain_previous_frame',
+              'AImageReader_acquireLatestImageAsync',
+              'AImage_deleteAsync',
+              'AImageReader_newWithUsage',
+              'AImageReader stats',
+          ]
+          for feat in feature_anchors:
+              if feat not in src:
+                  raise SystemExit('FATAL: NeoPlayer feature anchor missing: ' + feat)
+          if marker in src:
+              print('aimagereader uninit order patch already applied')
+          else:
+              lines = src.split('\n')
+              starts = [i for i, ln in enumerate(lines)
+                        if ln.startswith('static void uninit(struct ra_hwdec *hw)')]
+              if len(starts) != 1:
+                  raise SystemExit('FATAL: uninit() count != 1: %d' % len(starts))
+              start = starts[0]
+              depth = 0
+              end = None
+              for i in range(start, len(lines)):
+                  depth += lines[i].count('{') - lines[i].count('}')
+                  if depth == 0 and i > start:
+                      end = i
+                      break
+              if end is None:
+                  raise SystemExit('FATAL: uninit() closing brace not found')
+              body = lines[start:end + 1]
+
+              def block_bounds(anchor):
+                  idx = [i for i, ln in enumerate(body)
+                         if anchor in ln and ln.strip().endswith('{')]
+                  if len(idx) != 1:
+                      raise SystemExit(
+                          'FATAL: block anchor %s count != 1: %d' % (anchor, len(idx)))
+                  i = idx[0]
+                  d = 0
+                  for j in range(i, len(body)):
+                      d += body[j].count('{') - body[j].count('}')
+                      if d == 0 and j > i:
+                          return i, j
+                  raise SystemExit('FATAL: block anchor %s has no closing brace' % anchor)
+
+              js, je = block_bounds('if (p->java_surface)')
+              rs, re = block_bounds('if (p->reader)')
+              hw_idx = [i for i, ln in enumerate(body)
+                        if 'hwdec_devices_remove(hw->devs, &p->hwctx);' in ln]
+              buf_idx = [i for i, ln in enumerate(body)
+                         if 'av_buffer_unref(&p->hwctx.av_device_ref);' in ln]
+              if len(hw_idx) != 1 or len(buf_idx) != 1:
+                  raise SystemExit('FATAL: uninit remove anchors not unique')
+              if not (hw_idx[0] < js and buf_idx[0] < js):
+                  raise SystemExit('FATAL: unexpected uninit layout')
+
+              before = Counter(ln.strip() for ln in body if ln.strip())
+              prefix = [ln for k, ln in enumerate(body[:js])
+                        if k not in (hw_idx[0], buf_idx[0])]
+              jblock = body[js:je + 1]
+              rblock = body[rs:re + 1]
+              between = body[je + 1:rs]
+              tail = body[re + 1:]
+              new_body = (prefix + [marker_line] + jblock + between + rblock +
+                          ['', body[hw_idx[0]], body[buf_idx[0]]] + tail)
+
+              after = Counter(ln.strip() for ln in new_body if ln.strip())
+              if after - before != Counter({marker_line.strip(): 1}) or before - after:
+                  raise SystemExit('FATAL: uninit lines changed beyond reorder')
+
+              def pos(needle):
+                  hits = [i for i, ln in enumerate(new_body) if needle in ln]
+                  if len(hits) != 1:
+                      raise SystemExit('FATAL: order anchor %s count != 1' % needle)
+                  return hits[0]
+
+              order = [
+                  pos('MP_JNI_CALL_VOID(p->java_surface, p->surface_release_id);'),
+                  pos('MP_JNI_GLOBAL_FREEP(&p->java_surface);'),
+                  pos('p->AImageReader_delete(p->reader);'),
+                  pos('hwdec_devices_remove(hw->devs, &p->hwctx);'),
+                  pos('av_buffer_unref(&p->hwctx.av_device_ref);'),
+              ]
+              if order != sorted(order):
+                  raise SystemExit('FATAL: uninit release order is not monotonic')
+
+              new_src = '\n'.join(lines[:start] + new_body + lines[end + 1:])
+              for feat in feature_anchors:
+                  if feat not in new_src:
+                      raise SystemExit('FATAL: NeoPlayer feature lost: ' + feat)
+              open(path, 'w', encoding='utf-8', newline='\n').write(new_src)
+              print('patched', path)
+          PY
+          grep -n 'PATCH: aimagereader uninit release order' buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c
           # Exact NextPlayerCloud recipe uses vanilla libdvdnav/libdvdread/libbluray tarballs.
           test -f buildscripts/deps/libdvdnav/src/dvdnav/dvdnav.h
           ls -d buildscripts/deps/libdvdread buildscripts/deps/libdvdnav buildscripts/deps/libbluray
@@ -156,6 +261,7 @@ jobs:
           grep -n 'PATCH: hwdec H.264' buildscripts/deps/mpv/player/video.c
           grep -n 'PATCH: disc slave demuxer cache' buildscripts/deps/mpv/demux/demux_disc.c
           grep -n 'PATCH: always allow demuxer prefetch' buildscripts/deps/mpv/demux/demux_disc.c
+          grep -n 'PATCH: aimagereader uninit release order' buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c
           grep -n 'Send MPVNode.None instead' app/src/main/jni/event.cpp
           AAR=app/build/outputs/aar/app-release.aar
           test -f "$AAR"
@@ -172,10 +278,10 @@ jobs:
       - name: Upload AAR to Release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: native-avcfix-mpv042-iso-mcconfigure-retry-20261128
+          TAG: native-avcfix-mpv042-iso-uninit-release-order-20261129
         run: |
           set -e
           test -f app/build/outputs/aar/app-release.aar
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ configure retry" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
+            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ uninit release order" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + hwdec_aimagereader.c uninit() release order fix (Surface.release / DeleteGlobalRef / AImageReader_delete before hwdec_devices_remove / av_buffer_unref) preserving all NeoPlayer features (Vulkan, DV mapping, HDR colorspace, stale-frame check, retained frames, async images, max_images=5, stats) + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
           gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
