@@ -57,7 +57,8 @@ patch(
     'video/out/vo.c',
     'PATCH: vo_eof_reset E',
     '''void vo_seek_reset(struct vo *vo)\n{\n    struct vo_internal *in = vo->in;\n    mp_mutex_lock(&in->lock);\n    forget_frames(vo);\n    reset_vsync_timings(vo);\n    in->send_reset = true;\n    wakeup_locked(vo);\n    mp_mutex_unlock(&in->lock);\n}\n''',
-    '''static void send_reset(struct vo *vo, bool forget_all)\n{\n    struct vo_internal *in = vo->in;\n    mp_mutex_lock(&in->lock);\n    forget_frames(vo);\n    if (forget_all)\n        TA_FREEP(&in->current_frame);\n    reset_vsync_timings(vo);\n    in->send_reset = MPMAX(in->send_reset, forget_all ? 2 : 1);\n    wakeup_locked(vo);\n    mp_mutex_unlock(&in->lock);\n}\n\nvoid vo_seek_reset(struct vo *vo)\n{\n    send_reset(vo, false);\n}\n\n/* PATCH: vo_eof_reset E - forget all frame refs on EOF */\nvoid vo_eof_reset(struct vo *vo)\n{\n    send_reset(vo, true);\n}\n''',
+    '''static void send_reset(struct vo *vo, bool forget_all)\n{\n    struct vo_internal *in = vo->in;\n    mp_mutex_lock(&in->lock);\n    forget_frames(vo);\n    if (forget_all)\n        TA_FREEP(&in->current_frame);\n    reset_vsync_timings(vo);\n    in->send_reset = MPMAX(in->send_reset, forget_all ? 2 : 1);\n    wakeup_locked(vo);\n    mp_mutex_unlock(&in->lock);\n}\n\nvoid vo_seek_reset(struct vo *vo)\n{\n    send_reset(vo, false);\n}\n\n/* PATCH: vo_eof_reset E - synchronous frame reset on EOF */\nvoid vo_eof_reset(struct vo *vo)\n{\n    struct vo_internal *in = vo->in;\n    mp_mutex_lock(&in->lock);\n    forget_frames(vo);\n    TA_FREEP(&in->current_frame);\n    reset_vsync_timings(vo);\n    mp_mutex_unlock(&in->lock);\n\n    /* Wake wait_events() before waiting on the dispatch queue. */\n    vo_wakeup(vo);\n    vo_control(vo, VOCTRL_RESET, NULL);\n    vo_control(vo, VOCTRL_FRAME_RESET, NULL);\n    MP_VERBOSE(vo, "PATCH: vo_eof_reset E2: synchronous frame reset done\\n");\n}\n''',
+    ('vo_wakeup(vo)', 'vo_control(vo, VOCTRL_RESET, NULL)', 'vo_control(vo, VOCTRL_FRAME_RESET, NULL)', 'PATCH: vo_eof_reset E2'),
 )
 
 patch(
@@ -102,8 +103,8 @@ patch(
     'video/out/vo_gpu_next.c',
     'PATCH: vo_eof_reset K',
     '''    case VOCTRL_RESET:\n        // Defer until the first new frame (unique ID) actually arrives\n        p->want_reset = true;\n        p->reset_map_failed_id = 0;\n        return VO_TRUE;\n''',
-    '''    case VOCTRL_RESET:\n        // Defer until the first new frame (unique ID) actually arrives\n        p->want_reset = true;\n        p->reset_map_failed_id = 0;\n        return VO_TRUE;\n    case VOCTRL_FRAME_RESET: /* PATCH: vo_eof_reset K */\n        reset_frame_queue(p);\n        pl_renderer_flush_cache(p->rr);\n        p->flush_cache = false;\n        p->want_reset = false;\n        return VO_TRUE;\n''',
-    ('reset_frame_queue', 'pl_queue_reset', 'flush_cache'),
+    '''    case VOCTRL_RESET:\n        // Defer until the first new frame (unique ID) actually arrives\n        p->want_reset = true;\n        p->reset_map_failed_id = 0;\n        return VO_TRUE;\n    case VOCTRL_FRAME_RESET: /* PATCH: vo_eof_reset K */\n        reset_frame_queue(p);\n        pl_renderer_flush_cache(p->rr);\n        p->flush_cache = false;\n        p->want_reset = false;\n        MP_VERBOSE(vo, "PATCH: vo_eof_reset K2: vo_gpu_next frame queue reset\\n");\n        return VO_TRUE;\n''',
+    ('reset_frame_queue', 'pl_queue_reset', 'flush_cache', 'PATCH: vo_eof_reset K2'),
 )
 
 patch(

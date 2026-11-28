@@ -124,10 +124,10 @@ jobs:
               block = [
                   indent + '/* PATCH: mediacodec configure retry */',
                   lines[i],
-                  indent + 'for (int retry = 0; status < 0 && retry < 5; retry++) {',
+                  indent + 'for (int retry = 0; status < 0 && retry < 20; retry++) {',
                   indent + '    /* Previous episode codec may still be releasing the',
                   indent + '     * AImageReader surface during playlist transitions. */',
-                  indent + '    av_usleep(60000);',
+                  indent + '    av_usleep(100000);',
                   indent + '    ' + lines[i].strip(),
                   indent + '}',
               ]
@@ -136,6 +136,9 @@ jobs:
               print('patched', path)
           PY
           grep -n 'PATCH: mediacodec configure retry' buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c
+          # Diagnostic: log whether FFmpeg actually stops the old MediaCodec on close.
+          python3 .github/scripts/mediacodec_close_probe.py buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c
+          grep -n 'PATCH: mediacodec close probe' buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c
           # PATCH: 15-line uninit() release order fix. Only reorder release
           # calls in hwdec_aimagereader.c; keep every NeoPlayer feature intact.
           python3 - <<'PY'
@@ -247,13 +250,14 @@ jobs:
           # codec connected to the AImageReader surface. Additive-only patch.
           python3 .github/scripts/frame_reset_patch.py buildscripts/deps/mpv
           grep -n 'PATCH: vo_eof_reset A' buildscripts/deps/mpv/player/loadfile.c
-          grep -n 'PATCH: vo_eof_reset E' buildscripts/deps/mpv/video/out/vo.c
+          grep -n 'PATCH: vo_eof_reset E2' buildscripts/deps/mpv/video/out/vo.c
           grep -n 'PATCH: vo_eof_reset F' buildscripts/deps/mpv/video/out/vo.h
           grep -n 'PATCH: vo_eof_reset H' buildscripts/deps/mpv/video/out/vo_gpu.c
           grep -n 'PATCH: vo_eof_reset I' buildscripts/deps/mpv/video/out/gpu/video.c
           grep -n 'PATCH: vo_eof_reset J' buildscripts/deps/mpv/video/out/gpu/video.h
-          grep -n 'PATCH: vo_eof_reset K' buildscripts/deps/mpv/video/out/vo_gpu_next.c
+          grep -n 'PATCH: vo_eof_reset K2' buildscripts/deps/mpv/video/out/vo_gpu_next.c
           grep -n 'PATCH: vo_eof_reset L' buildscripts/deps/mpv/video/out/vo_libmpv.c
+          grep -n 'PATCH: mediacodec close probe' buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c
           for feat in HAVE_VULKAN supports_gpu_dovi_mapping AImage_getDataSpace IMAGE_TIMESTAMP_TOLERANCE_NS retain_previous_frame AImageReader_acquireLatestImageAsync AImage_deleteAsync AImageReader_newWithUsage 'AImageReader stats'; do
             grep -q "$feat" buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c || { echo "MISSING NeoPlayer feature: $feat"; exit 1; }
           done
@@ -280,9 +284,10 @@ jobs:
           grep -n 'PATCH: always allow demuxer prefetch' buildscripts/deps/mpv/demux/demux_disc.c
           grep -n 'PATCH: aimagereader uninit release order' buildscripts/deps/mpv/video/out/hwdec/hwdec_aimagereader.c
           grep -n 'PATCH: vo_eof_reset A' buildscripts/deps/mpv/player/loadfile.c
-          grep -n 'PATCH: vo_eof_reset E' buildscripts/deps/mpv/video/out/vo.c
+          grep -n 'PATCH: vo_eof_reset E2' buildscripts/deps/mpv/video/out/vo.c
           grep -n 'PATCH: vo_eof_reset F' buildscripts/deps/mpv/video/out/vo.h
-          grep -n 'PATCH: vo_eof_reset K' buildscripts/deps/mpv/video/out/vo_gpu_next.c
+          grep -n 'PATCH: vo_eof_reset K2' buildscripts/deps/mpv/video/out/vo_gpu_next.c
+          grep -n 'PATCH: mediacodec close probe' buildscripts/deps/ffmpeg/libavcodec/mediacodecdec_common.c
           grep -n 'Send MPVNode.None instead' app/src/main/jni/event.cpp
           AAR=app/build/outputs/aar/app-release.aar
           test -f "$AAR"
@@ -299,10 +304,10 @@ jobs:
       - name: Upload AAR to Release asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: native-avcfix-mpv042-iso-eof-frame-reset-fix-20261129
+          TAG: native-avcfix-mpv042-iso-eof-frame-reset-sync-20261129
         run: |
           set -e
           test -f app/build/outputs/aar/app-release.aar
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ EOF frame reset fix" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry for playlist surface conflicts + hwdec_aimagereader.c uninit() release order fix + EOF frame reset adapted from mpv PR #14631 with corrected call order (vo_eof_reset now runs before uninit_video_chain clears vo_chain) so old frame references are actually released on file transition, preserving all NeoPlayer features (Vulkan, DV mapping, HDR colorspace, stale-frame check, retained frames, async images, max_images=5, stats) + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
+            gh release create "$TAG" --prerelease --title "NeoPlayer recipe ISO AAR + HW+ synchronous EOF frame reset" --notes "mpv 0.42.0 + AVC PTS patch + stream_iso/fongmi + always-on disc demuxer prefetch + non-null JNI event node + FFmpeg mediacodec configure retry (20 x 100ms) + FFmpeg close diagnostics + hwdec_aimagereader.c uninit() release order fix + synchronous EOF frame reset adapted from mpv PR #14631 (vo_wakeup + vo_control VOCTRL_RESET/FRAME_RESET, no async duplicate) so old frame references are released before decoder teardown, preserving all NeoPlayer features (Vulkan, DV mapping, HDR colorspace, stale-frame check, retained frames, async images, max_images=5, stats) + DVD/Blu-ray/ISO, FFmpeg release-8.1-fongmi, libplacebo fongmi"
           gh release upload "$TAG" app/build/outputs/aar/app-release.aar --clobber
